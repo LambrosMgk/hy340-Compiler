@@ -1,0 +1,1 @@
+Exoun ginei ola ektos apo to second line argument, eixa thema sto na kanw redirect to stdout se file
