@@ -1,0 +1,26 @@
+x = 10.12;
+y = "hello";
+{k = x+y+z+z+l+p;}
+k = x-y-z-z;
+t = [x,20,30+30,40];
+t.x.y = c.x.y=f.x.y;
+lol = ["test", "and another one"];
+k = lol[0];
+k = lol.test;
+
+x = p[a+b];
+y = q.a = x;
+
+x = ["hello", "world", ["a","b"]];
+a = x["hello"]["a"];
+y = x;
+z = tablecopy(x);
+y = nil;
+z = nil;
+x = nil;
+
+function myFunc ( x , y , z)
+{
+	local x;	//must refers to the argument
+	return (x-y+z);
+}
