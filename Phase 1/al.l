@@ -169,7 +169,7 @@ undefined [^keyword^operator^integer^real^string^punctuation^id^whitespace]
 		}
 		else
 		{
-			if(c == 0 && (opened != closed))	/*old implementation c == EOF when i used flex on windows, when i switched to linux it didn't work*/
+			if(c == EOF && (opened != closed))	/*old implementation c == EOF when i used flex on windows, when i switched to linux it didn't work*/
 			{
 				if(tmp == NULL)	/*you can't get here, something went really bad if you do (tmp == NULL can't mean opened != closed)*/
 				{
@@ -278,7 +278,6 @@ undefined [^keyword^operator^integer^real^string^punctuation^id^whitespace]
 			}
 			else
 			{
-				
 				fprintf(alpha_yyout, ANSI_COLOR_YELLOW"Warning : invalid escape character \'%c\' on string line %d col %d.\n"ANSI_COLOR_RESET,alpha_yytext[i+1], alpha_yylineno, column + i);
 			}
 		}
