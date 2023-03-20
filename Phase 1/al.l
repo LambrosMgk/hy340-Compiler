@@ -180,7 +180,6 @@ undefined [^keyword^operator^integer^real^string^punctuation^id^whitespace]
 				tmp = head;	/*last struct is on the list so i can reuse tmp like this*/
 				while(tmp->next != NULL)
 				{
-					fprintf(alpha_yyout, "While loop\n");
 					fprintf(alpha_yyout, ANSI_COLOR_RED"Error comment in line %d col %d is not closed"ANSI_COLOR_RESET"\n", tmp->lineno, tmp->col);
 					tmp = tmp->next;
 					free(tmp->prev);	/*also delete the list*/
@@ -278,7 +277,7 @@ undefined [^keyword^operator^integer^real^string^punctuation^id^whitespace]
 			}
 			else
 			{
-				fprintf(alpha_yyout, ANSI_COLOR_YELLOW"Warning : invalid escape character \'%c\' on string line %d col %d.\n"ANSI_COLOR_RESET,alpha_yytext[i+1], alpha_yylineno, column + i);
+				fprintf(alpha_yyout, ANSI_COLOR_YELLOW"Warning : invalid escape character \'%c\' on string line %d col %d."ANSI_COLOR_RESET"\n",alpha_yytext[i+1], alpha_yylineno, column + i);
 			}
 		}
 	}
