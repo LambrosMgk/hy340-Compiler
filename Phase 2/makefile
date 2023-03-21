@@ -5,7 +5,7 @@ CC = gcc
 %.o: %.c $(DEPS)
 	$(CC) -c -o $@ $< $(CFLAGS)
 	
-all: clean flex syntax
+all: clean flex syntax parser
 
 flex: al.l
 	flex --outfile=scanner.c al.l
@@ -13,7 +13,7 @@ flex: al.l
 syntax: syntax.y
 	bison -v --yacc --defines --output=syntax.c syntax.y
 
-g:
+parser:
 	gcc -o parser scanner.c syntax.c symbol_table.c
 
 clean:

@@ -21,7 +21,7 @@
 %}
 
 %define api.prefix {alpha_yy}
-%error-verbose
+%define parse.error verbose
 
 %start program
 
