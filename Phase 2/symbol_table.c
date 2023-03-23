@@ -22,52 +22,55 @@ int is_lib_func(char *funcName)
 
 void init_lib_funcs()
 {
-    symbol_T elem = NULL, tmp;
+    symbol_T elem = NULL, tmp = NULL;
     int i;
 
+    if(symbol_table == NULL)
+    {
+        fprintf(stderr, "Error in init_lib_funcs(), symbol table is not initialized...\n");
+        exit(-1);
+    }
+    
+
+    tmp = symbol_table[0];
     for(i = 0; i < 12; i++)
     {
         elem = malloc(sizeof(symbol));
         if(elem == NULL)
         {
-            fprintf(stderr, "Error in addElement, not enough memory...\n");
+            fprintf(stderr, "Error in init_lib_funcs(), not enough memory...\n");
             exit(0);
         }
 
         elem->varName = strdup(lib_funcs[i]);   /*maybe no need for strdup? just assign pointer*/
-        elem->category = 0;
+        elem->category = library_function;
         elem->active = 1;
         elem->scope = 0;
         elem->line = 0;
         elem->nextSym = NULL;
 
-        if(symbol_table != NULL)
+        if(symbol_table[0] == NULL)
         {
-            tmp = symbol_table;
-            while(tmp->nextSym != NULL)
-            {
-                tmp = tmp->nextSym;
-            }
-            tmp->nextSym = elem;
+            symbol_table[0] = elem;
+            tmp = elem;
         }
         else
-            symbol_table = elem;
+        {
+            tmp->nextSym = elem;
+            tmp = elem;
         }
+    }
 }
 
 void init_symbol_table()
 {
-    symbol_table = (symbol_T **) malloc(TotalScopes * sizeof(symbol_T *));
+    symbol_table = (symbol_T *) malloc(TotalScopes * sizeof(symbol_T ));
     if(symbol_table == NULL)
     {
         fprintf(stderr, "Error : not enough memory to initialize symbol table. Exiting...\n");
     }
+    symbol_table[0] = NULL; /*init memory*/
     init_lib_funcs();
-}
-
-symbol_T search_from_scope_out(char *name, int scope)
-{
-
 }
 
 /*returns the struct with varName == name and same scope, otherwise null*/
@@ -87,9 +90,36 @@ symbol_T getElement(char *name, int scope)
     return tmp;
 }
 
+/*the search is performed outwards starting from the given scope, returns only active symbols*/
+symbol_T search_from_scope_out(char *name, int scope)
+{
+    symbol_T tmp = NULL;
+    int tmpscope = scope;
+
+    if(TotalScopes < scope + 1)
+    {
+        tmpscope = TotalScopes-1;
+    }
+
+    
+    while(tmpscope >= 0)
+    {
+        tmp = symbol_table[tmpscope];
+        while(tmp != NULL && strcmp(tmp->varName, name) != 0)
+        {
+            tmp = tmp->nextSym;
+        }
+        if(tmp != NULL && strcmp(tmp->varName, name) == 0 && tmp->active == 1)
+            break;
+        tmpscope--;
+    }
+    
+    return tmp;
+}
+
 /*on success return the pointer of the new symbol, otherwise NULL*/
 /*isws spasto se addID kai addFunction?*/
-symbol_T addElement(char * symbol_name, enum SymbolCategory category, int scope, int line)
+symbol_T addSymbol(char * symbol_name, enum SymbolCategory category, int scope, int line)
 {
     symbol_T elem = NULL, tmp = NULL, prev = NULL;
     int i = 0;
@@ -98,12 +128,12 @@ symbol_T addElement(char * symbol_name, enum SymbolCategory category, int scope,
     if(is_lib_func(symbol_name) == 1)   /*if lib function then no need to add it again to the table*/
     {
         fprintf(stderr, "Error : Shadowing of library functions is not allowed.\n");
-        return NULL;
+        exit(-1);
     }
     if(symbol_table == NULL)
     {
         fprintf(stderr, "Error : Symbol table is not initialized.\n");
-        return NULL;
+        exit(-1);
     }
     if(TotalScopes < scope+1) /*scope + 1 because if i call from syntax.y with scope 0 but that means there is a total of 1 scopes*/
     {
@@ -112,9 +142,10 @@ symbol_T addElement(char * symbol_name, enum SymbolCategory category, int scope,
         if(symbol_table == NULL)
         {
             fprintf(stderr, "Error : Realloc for symbol table failed.\n");
-            return NULL;
+            exit(-1);
         }
         TotalScopes = scope + 1;
+        /*printf("reallocated memory, Total scopes : %d\n", TotalScopes);*/
     }
 
 
@@ -124,7 +155,7 @@ symbol_T addElement(char * symbol_name, enum SymbolCategory category, int scope,
         elem = malloc(sizeof(symbol));
         if(elem == NULL)
         {
-            fprintf(stderr, "Error in addElement, not enough memory...\n");
+            fprintf(stderr, "Error in addSymbol, not enough memory...\n");
             exit(0);
         }
 
@@ -155,13 +186,13 @@ symbol_T addElement(char * symbol_name, enum SymbolCategory category, int scope,
                 /*else tmp->active == 0*/
                 tmp->active = 1;    /*there is a symbol that has the same category and scope, so we activate it again*/
                 printf("Activated symbol %s and changed line from %d to %d\n", tmp->varName, tmp->line, line);
-                tmp->line = line;
+                /*tmp->line = line;*/   /*keep the line where the symbol was first encountered*/
                 return tmp;
             }
             else
             {
                 printf("Symbol redefinition? Symbol recorded %s in line %d, new symbol in line %d\n", tmp->varName, tmp->line, line);
-                return NULL;
+                exit(-1);
             }
             break;
         }
@@ -174,7 +205,7 @@ symbol_T addElement(char * symbol_name, enum SymbolCategory category, int scope,
     elem = malloc(sizeof(symbol));
     if(elem == NULL)
     {
-        fprintf(stderr, "Error in addElement, can't create new symbol, not enough memory...\n");
+        fprintf(stderr, "Error in addSymbol, can't create new symbol, not enough memory...\n");
         exit(0);
     }
     elem->varName = strdup(symbol_name);
@@ -194,17 +225,18 @@ symbol_T add_anonymus_func(int scope, int line)
 {
     symbol_T elem = NULL;
     int i = 0;
-    char buf[5] = {0};  /*_f and \0 are 3 chars and 2 chars for digits allowing up to 100 anonymus functions*/
+    char buf[5] = {0};  /*_f and \0 are 3 chars leaving us with 2 chars for digits allowing up to 100 anonymus functions*/
 
     snprintf(buf, 5, "_f%d", i);
-    elem = addElement(buf, 4, scope, line);
-    while(elem == NULL && i < 100)
+    elem = search_from_scope_out(buf, scope);
+    while(elem != NULL && i < 100)
     {
         i++;
         snprintf(buf, 5, "_f%d", i);
-        elem = addElement(buf, 4, scope, line);
+        elem = search_from_scope_out(buf, scope);
     }
-
+    
+    elem = addSymbol(buf, user_func, scope, line);
 
     return elem;
 }
@@ -215,11 +247,11 @@ void print_symbol_table()
 
     for(int i = 0; i < TotalScopes; i++)
     {
-        tmp = symbol_table[i];
         printf("-------------- Scope #%d --------------\n", i);
+        tmp = symbol_table[i];
         while(tmp != NULL)
         {
-            printf("%s ");
+            printf("%-18s ", tmp->varName);
             if(tmp->category == library_function)
                 printf("[library function] ");
             else if(tmp->category == global_var)
@@ -240,11 +272,12 @@ void print_symbol_table()
     }
 }
 
+/*Mark all symbols in the given scope as not syntactically active*/
 void hide_in_scope(int scope)
 {
-    symbol_T tmp = NULL, tmpSubList = NULL;
+    symbol_T tmp = NULL;
 
-    if(tmp == NULL)
+    if(symbol_table == NULL)
     {
         printf("Error in hide_in_scope() : Symbol table is not initialized.\n");
         return;

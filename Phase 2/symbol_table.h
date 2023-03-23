@@ -22,7 +22,9 @@ void init_symbol_table();
 
 symbol_T getElement(char *name, int scope);
 
-symbol_T addElement(char * varName, enum SymbolCategory category, int scope, int line);
+symbol_T search_from_scope_out(char *name, int scope);
+
+symbol_T addSymbol(char * varName, enum SymbolCategory category, int scope, int line);
 
 symbol_T add_anonymus_func(int scope, int line);
 

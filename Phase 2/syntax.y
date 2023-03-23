@@ -39,8 +39,8 @@
 %token<strVal> plus minus mul divide mod greater ge less le equal neq plusplus minusminus assign uminus
 %token<strVal> Lparenthesis Rparenthesis LCurlyBracket RCurlyBracket LSquareBracket RSquareBracket Semicolon comma colon coloncolon dot dotdot
 
-%type<symPtr> lvalue primary term expr
-%type<strVal> assignexpr member call callsuffix normcall methodcall elist objectdef
+%type<symPtr> lvalue primary term expr member
+%type<strVal> assignexpr call callsuffix normcall methodcall elist objectdef
 %type<strVal> indexed indexedelem block funcdef const idlist ifstmt whilestmt forstmt returnstmt
 %type<intVal> stmt
 
@@ -109,61 +109,83 @@ term:   Lparenthesis expr Rparenthesis {  printMessage("term -> (expr)"); } |
         primary { printMessage("term -> primary");}
     ;
 
-assignexpr:     lvalue assign expr  { printMessage("assignexpr -> lvalue = expr");}
+assignexpr:     lvalue assign expr  {
+            symbol_T lval = $1;
+            
+            if(lval != NULL && (lval->category == library_function || lval->category == user_func))
+            {
+                printf("Syntax error: function %s used as an l-value\n", lval->varName);
+                exit(-1);
+            }
+
+            printMessage("assignexpr -> lvalue = expr");}
     ;
 
-primary:    lvalue  { printMessage("primary -> lvalue"); }    |
+primary:    lvalue  {
+                $$ = $1;
+                printMessage("primary -> lvalue"); 
+            }    |
             call    { printMessage("primary -> call"); }    |
             objectdef   { printMessage("primary -> objectdef"); }   |
             Lparenthesis funcdef Rparenthesis { printMessage("primary -> (funcdef)"); } |
             const   { printMessage("primary -> const"); }
     ;
 
-lvalue:     ID  { 
-                    symbol_T sym = getElement($1, scope);
-                    if(sym == NULL && scope != 0 && is_lib_func($1) == 0)
+lvalue:     ID  {
+                    symbol_T sym = search_from_scope_out($1, scope);
+                    enum SymbolCategory category;
+
+                    if(sym == NULL) /*if you can't find anything add new symbol*/
                     {
-                        printf("Syntax error: no variable %s in scope\n", $1);
-                        exit(-1);
-                    }
-                    else if(sym != NULL && sym->scope == scope)
-                    {
-                        if(sym->category == 2)
-                            printf("this reference will use the function argument variable\n");
-                    }
-                    else if(sym != NULL && sym->scope == 0)
-                        printf("this refers to global %s\n", $1);
-                    else if(addElement($1, 1, scope, alpha_yylineno) != NULL) 
+                        if(scope == 0)
+                            category = global_var;
+                        else
+                            category = local_var;
+
+                        sym = addSymbol($1, category, scope, alpha_yylineno);
                         printf("Added symbol\n");
-                    printf("lvalue -> ID with scope %d ", scope); 
+                    }
+                    /*else sym != NULL*/
+                    else if(sym->scope != 0) /*if you find a global var, refer to that. if you are inside a function you can't access anything except global or args or local*/
+                    {
+                        
+                    }
+
+                    printf("lvalue -> ID\n"); 
                     $$ = sym; 
                 }   |
-            local ID    { 
-                    symbol_T sym = getElement($2, scope);
-                    if(is_lib_func($2) == 1)
-                    {
-                        printf("Syntax error: can't use library function name %s as local var.\n", $2);
-                        exit(-1);
-                    } else if(sym!= NULL && sym->category == 2)
+            local ID    {
+                    symbol_T sym = search_from_scope_out($2, scope);
+
+                    if(sym!= NULL && sym->category == func_arg && sym->active == 1)
                     {
                         /*printf("local x == arg x\n");*/
                     } 
                     else if (scope == 0) /*if global ignore local*/
-                        addElement($2, 1, scope, alpha_yylineno); 
+                    {
+                        sym = addSymbol($2, global_var, scope, alpha_yylineno);
+                        printf("Added global %s (ignored local)\n", $2);
+                    }
                     else
-                        addElement($2, 3, scope, alpha_yylineno); 
+                    {
+                        sym = addSymbol($2, local_var, scope, alpha_yylineno);
+                        printf("Added local %s\n", $2);
+                    }
+
+                    $$ = sym;
                     printMessage("lvalue -> local ID"); 
                 } |
             coloncolon ID   {
-                symbol_T sym = getElement($2, 0);
+                symbol_T sym = getElement($2, 0); /*:: means we search in global scope*/
                 if(sym == NULL)
                 {
-                    printf("Syntax error: no global %s variable or function\n", $2);
+                    printf("Syntax error: no global variable or function %s\n", $2);
                     exit(-1);
                 }
                 $$ = sym;
-                printMessage("lvalue -> :: ID"); } |
-            member  { printMessage("lvalue -> member"); }
+                printMessage("lvalue -> :: ID"); 
+                } |
+            member  { $$ = NULL; printMessage("lvalue -> member"); }
     ;
 
 member:     lvalue dot ID   { printMessage("member -> lvalue.ID"); }    |
@@ -213,11 +235,12 @@ funcdef:    FUNCTION ID {
                 printf("Syntax error: redeclaration of %s as function\n", $2);
                 exit(-1);
             }
-            addElement($2, 4, scope, alpha_yylineno); } 
+            addSymbol($2, 4, scope, alpha_yylineno); } 
             Lparenthesis idlist Rparenthesis block  { printMessage("funcdef -> function id(idlist){}"); }   |
-            FUNCTION Lparenthesis idlist Rparenthesis block {
-                add_anonymus_func(scope, alpha_yylineno);
-                printMessage("funcdef -> function(idlist){}"); }
+
+            FUNCTION {add_anonymus_func(scope, alpha_yylineno);} Lparenthesis idlist Rparenthesis block {
+                printMessage("funcdef -> function(idlist){}"); 
+            }
     ;
 
 const:  NUMBER  { printMessage("const -> number"); }    |
@@ -228,14 +251,14 @@ const:  NUMBER  { printMessage("const -> number"); }    |
     ;
 
 idlist:     ID  { 
-            symbol_T sym = addElement($1, 2, scope+1, alpha_yylineno);
-            if(sym != NULL)
+            symbol_T sym = addSymbol($1, 2, scope+1, alpha_yylineno);
+            /*if(sym != NULL)
             {
                 printf("Syntax error: argument %s is already declared\n", $1);
                 exit(-1);
-            }
+            }*/
             printMessage("idlist -> ID"); }   |
-            idlist comma ID { addElement($3, 2, scope+1, alpha_yylineno); printMessage("idlist -> idlist,ID");} |
+            idlist comma ID { addSymbol($3, 2, scope+1, alpha_yylineno); printMessage("idlist -> idlist,ID");} |
                 { printMessage("idlist -> empty"); }
     ;
 
