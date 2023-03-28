@@ -218,10 +218,14 @@ symbol_T addSymbol(char * symbol_name, enum SymbolCategory category, int scope, 
             }
             else
             {
-                printf("Symbol redefinition? Symbol recorded %s in line %d, new symbol in line %d\n", tmp->varName, tmp->line, line);
-                exit(-1);
+                /*printf("Symbol redefinition? Symbol recorded %s in line %d, new symbol in line %d\n", tmp->varName, tmp->line, line);*/
+                /*exit(-1);*/
+                /*same name different category, in that case i'll create a new symbol. only example for this case that i found was
+                function g(x,y) { //random code }
+                {
+                    local x;  <- matches with the func arg "x" in scope 1, leading to symbol redefinition
+                }*/
             }
-            break;
         }
         prev = tmp;
         tmp = tmp->nextSym;
