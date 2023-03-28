@@ -90,6 +90,33 @@ symbol_T getElement(char *name, int scope)
     return tmp;
 }
 
+/*the search is performed outwards starting from the given scope, returns the first to encounter active function symbol*/
+symbol_T getActiveFunctionFromScopeOut(int scope)
+{
+    symbol_T tmp = NULL;
+    int tmpscope = scope;
+
+    if(TotalScopes < scope + 1)
+    {
+        tmpscope = TotalScopes-1;
+    }
+
+    
+    while(tmpscope >= 0)
+    {
+        tmp = symbol_table[tmpscope];
+        while(tmp != NULL && tmp->category != user_func)
+        {
+            tmp = tmp->nextSym;
+        }
+        if(tmp != NULL && tmp->category == user_func && tmp->active == 1)
+            break;
+        tmpscope--;
+    }
+    
+    return tmp;
+}
+
 /*the search is performed outwards starting from the given scope, returns only active symbols*/
 symbol_T search_from_scope_out(char *name, int scope)
 {
@@ -127,7 +154,7 @@ symbol_T addSymbol(char * symbol_name, enum SymbolCategory category, int scope, 
 
     if(is_lib_func(symbol_name) == 1)   /*if lib function then no need to add it again to the table*/
     {
-        fprintf(stderr, "Error : Shadowing of library functions is not allowed.\n");
+        fprintf(stderr, ANSI_COLOR_RED"Syntax error in line <%d> : Shadowing of library functions is not allowed."ANSI_COLOR_RESET"\n", line);
         exit(-1);
     }
     if(symbol_table == NULL)
@@ -180,7 +207,7 @@ symbol_T addSymbol(char * symbol_name, enum SymbolCategory category, int scope, 
             {
                 if(tmp->active == 1)
                 {
-                    printf("symbol %s exists and is already active\n", tmp->varName);
+                    /*printf("symbol %s exists and is already active\n", tmp->varName);*/
                     return NULL;
                 }
                 /*else tmp->active == 0*/
@@ -282,9 +309,9 @@ void hide_in_scope(int scope)
         printf("Error in hide_in_scope() : Symbol table is not initialized.\n");
         return;
     }
-    if(scope >= TotalScopes)
+    if(scope >= TotalScopes)    /*a block doesn't have to declare new variables so that scope might not exist in the symbol table*/
     {
-        printf("Error in hide_in_scope() : invalid scope %d compared to the currect number of scopes %d.\n", scope, TotalScopes);
+        return;
     }
     if(scope == 0)   /*can't hide global scope(lib funcs would be affected as well)*/
         return;

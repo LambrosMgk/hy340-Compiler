@@ -1,9 +1,6 @@
 %{
     #include "symbol_table.h"
-
-    #define ANSI_COLOR_RED     "\x1b[41m"
-    #define ANSI_COLOR_GREEN   "\x1b[32m"
-    #define ANSI_COLOR_RESET   "\x1b[0m"
+    #include "stack.h"
 
     int alpha_yylex(void);
     int alpha_yyerror(char *yaccProvidedMessage);
@@ -13,6 +10,7 @@
     extern FILE* alpha_yyin;
 
     int scope = 0;
+    int allowReturn = 0;
 
     void  printMessage(char *msg)
     {
@@ -62,7 +60,7 @@
 
 
 
-program:    stmts{ printMessage("program -> stmts\nAccepted!"); print_symbol_table();}
+program:    stmts{ printMessage("program -> stmts\n"ANSI_COLOR_GREEN"Accepted!"ANSI_COLOR_RESET); print_symbol_table();}
     ;
 
 stmts:  stmts stmt { printMessage("stmts -> statement kleene star");}
@@ -74,8 +72,24 @@ stmt:   expr Semicolon { printMessage("stmt -> exp;");} |
         whilestmt { printMessage("stmt -> while statement");} |
         forstmt { printMessage("stmt -> for statement");}  |
         returnstmt { printMessage("stmt -> return statement");} |
-        BREAK Semicolon { printMessage("stmt -> break; statement");} |
-        CONTINUE Semicolon { printMessage("stmt -> continue; statement");} |
+        BREAK Semicolon { 
+            stack_T elem = pop_loop();
+            if(elem == NULL)
+            {
+                printf(ANSI_COLOR_RED"Syntax error in line <%d>: break usage is not allowed outside of a loop"ANSI_COLOR_RESET"\n", alpha_yylineno);
+                exit(-1);
+            }
+            push_loop(elem->name, elem->scope);
+            printMessage("stmt -> break; statement");} |
+        CONTINUE Semicolon { 
+            stack_T elem = pop_loop();
+            if(elem == NULL)
+            {
+                printf(ANSI_COLOR_RED"Syntax error in line <%d>: continue usage is not allowed outside of a loop"ANSI_COLOR_RESET"\n", alpha_yylineno);
+                exit(-1);
+            }
+            push_loop(elem->name, elem->scope);
+            printMessage("stmt -> continue; statement");} |
         block { printMessage("stmt -> block statement");} |
         funcdef { printMessage("stmt -> funcdef statement");} |
         Semicolon { printMessage("stmt -> Semicolon statement");}
@@ -114,7 +128,7 @@ assignexpr:     lvalue assign expr  {
             
             if(lval != NULL && (lval->category == library_function || lval->category == user_func))
             {
-                printf("Syntax error: function %s used as an l-value\n", lval->varName);
+                printf(ANSI_COLOR_RED"Syntax error in line <%d>: function %s used as an l-value"ANSI_COLOR_RESET"\n", alpha_yylineno, lval->varName);
                 exit(-1);
             }
 
@@ -148,14 +162,22 @@ lvalue:     ID  {
                     /*else sym != NULL*/
                     else if(sym->scope != 0) /*if you find a global var, refer to that. if you are inside a function you can't access anything except global or args or local*/
                     {
+                        /*check the function stack and if symbol scope <= of function then error*/
+                        symbol_T tmp = getActiveFunctionFromScopeOut(scope-1);  /*functions stay active after their block is closed, so for this search to be correct we need to look 1 level higher*/
                         
+                        if(tmp != NULL && sym->scope <= tmp->scope)
+                        {
+                            printf(ANSI_COLOR_RED"Syntax error in line <%d>: cannot access %s inside function."ANSI_COLOR_RESET"\n", alpha_yylineno, $1);
+                            exit(-1);   /*call yacc error manager*/
+                        }
                     }
+
 
                     printf("lvalue -> ID\n"); 
                     $$ = sym; 
                 }   |
             local ID    {
-                    symbol_T sym = search_from_scope_out($2, scope);
+                    symbol_T sym = getElement($2, scope);
 
                     if(sym!= NULL && sym->category == func_arg && sym->active == 1)
                     {
@@ -179,7 +201,7 @@ lvalue:     ID  {
                 symbol_T sym = getElement($2, 0); /*:: means we search in global scope*/
                 if(sym == NULL)
                 {
-                    printf("Syntax error: no global variable or function %s\n", $2);
+                    printf(ANSI_COLOR_RED"Syntax error in line <%d>: no global variable or function %s"ANSI_COLOR_RESET"\n", alpha_yylineno, $2);
                     exit(-1);
                 }
                 $$ = sym;
@@ -232,13 +254,14 @@ funcdef:    FUNCTION ID {
             symbol_T sym = getElement($2, scope);
             if(sym != NULL)
             {
-                printf("Syntax error: redeclaration of %s as function\n", $2);
+                printf(ANSI_COLOR_RED"Syntax error in line <%d>: redeclaration of %s as function"ANSI_COLOR_RESET"\n", alpha_yylineno, $2);
                 exit(-1);
             }
-            addSymbol($2, 4, scope, alpha_yylineno); } 
-            Lparenthesis idlist Rparenthesis block  { printMessage("funcdef -> function id(idlist){}"); }   |
+            addSymbol($2, user_func, scope, alpha_yylineno); } 
+            Lparenthesis idlist Rparenthesis {allowReturn++;} block  { allowReturn--; printMessage("funcdef -> function id(idlist){}"); }   |
 
-            FUNCTION {add_anonymus_func(scope, alpha_yylineno);} Lparenthesis idlist Rparenthesis block {
+            FUNCTION {add_anonymus_func(scope, alpha_yylineno);} Lparenthesis idlist Rparenthesis {allowReturn++;} block {
+                allowReturn--;
                 printMessage("funcdef -> function(idlist){}"); 
             }
     ;
@@ -251,14 +274,24 @@ const:  NUMBER  { printMessage("const -> number"); }    |
     ;
 
 idlist:     ID  { 
-            symbol_T sym = addSymbol($1, 2, scope+1, alpha_yylineno);
-            /*if(sym != NULL)
+            symbol_T sym = addSymbol($1, func_arg, scope+1, alpha_yylineno);
+            
+            if(sym == NULL)
             {
-                printf("Syntax error: argument %s is already declared\n", $1);
+                printf(ANSI_COLOR_RED"Syntax error in line <%d>: argument %s is already declared"ANSI_COLOR_RESET"\n", alpha_yylineno, $1);
                 exit(-1);
-            }*/
+            }
             printMessage("idlist -> ID"); }   |
-            idlist comma ID { addSymbol($3, 2, scope+1, alpha_yylineno); printMessage("idlist -> idlist,ID");} |
+            idlist comma ID { 
+            symbol_T sym = addSymbol($3, func_arg, scope+1, alpha_yylineno);
+            
+            if(sym == NULL)
+            {
+                printf(ANSI_COLOR_RED"Syntax error in line <%d>: argument %s is already declared"ANSI_COLOR_RESET"\n", alpha_yylineno, $1);
+                exit(-1);
+            }
+            
+            printMessage("idlist -> idlist,ID"); } |
                 { printMessage("idlist -> empty"); }
     ;
 
@@ -273,17 +306,33 @@ ifstmt :    ifstmtprefix stmt { printMessage("ifstmt -> ifstmtprefix stmt"); }  
     ;
 
 
-whilestmt:   WHILE Lparenthesis expr Rparenthesis stmt { printMessage("whilestmt -> while (expr) stmt"); } 
+whilestmt:  WHILE { push_loop(NULL, scope); } 
+            Lparenthesis expr Rparenthesis stmt { pop_loop(); printMessage("whilestmt -> while (expr) stmt"); } 
     ;
 
 
-forstmt:    FOR Lparenthesis elist Semicolon expr Semicolon elist Rparenthesis stmt { 
-    printMessage("forstmt -> for(elist;expr;elist)stmt"); }  
+forstmt:    FOR { push_loop(NULL, scope); } Lparenthesis elist Semicolon expr Semicolon elist Rparenthesis stmt { 
+                pop_loop();
+                printMessage("forstmt -> for(elist;expr;elist)stmt"); }  
     ;
 
 
-returnstmt: RETURN Semicolon { printMessage("returnstmt -> return;"); }    |
-            RETURN expr Semicolon   { printMessage("returnstmt -> return expr;"); }
+returnstmt: RETURN Semicolon { 
+                if(allowReturn == 0)
+                {
+                    printf(ANSI_COLOR_RED"Syntax error in line <%d>: return is not allowed outside of a function"ANSI_COLOR_RESET"\n", alpha_yylineno);
+                    exit(-1);
+                }
+
+                printMessage("returnstmt -> return;"); }    |
+            
+            RETURN expr Semicolon   { 
+                if(allowReturn == 0)
+                {
+                    printf(ANSI_COLOR_RED"Syntax error in line <%d>: return is not allowed outside of a function"ANSI_COLOR_RESET"\n", alpha_yylineno);
+                    exit(-1);
+                }
+                printMessage("returnstmt -> return expr;"); }
     ;
 
 %%

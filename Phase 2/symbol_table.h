@@ -5,6 +5,14 @@
 #include <stdlib.h>
 #include <string.h>
 
+#define ANSI_COLOR_RED      "\x1b[31m"
+#define ANSI_COLOR_GREEN   "\x1b[32m"
+#define ANSI_COLOR_YELLOW  "\x1b[33m"
+#define ANSI_COLOR_RESET "\033[0m"
+
+#define ANSI_COLOR_RED_BACKGROUND     "\x1b[41m"
+#define ANSI_COLOR_RESET_BACKGROUND   "\x1b[0m"
+
 /*0 library functions, 1 global var(scope 0), 2 arguments, 3 local vars (scope >= 0) not arguments, 4 user functions*/
 enum SymbolCategory {library_function, global_var, func_arg, local_var, user_func};
 
@@ -21,6 +29,8 @@ int is_lib_func(char *funcName);
 void init_symbol_table();
 
 symbol_T getElement(char *name, int scope);
+
+symbol_T getActiveFunctionFromScopeOut(int scope);
 
 symbol_T search_from_scope_out(char *name, int scope);
 
