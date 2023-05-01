@@ -1,0 +1,3 @@
+insert new symbols, don;t reactive them
+
+Error7
