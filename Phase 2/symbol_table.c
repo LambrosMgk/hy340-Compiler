@@ -203,16 +203,28 @@ symbol_T addSymbol(char * symbol_name, enum SymbolCategory category, int scope, 
     {
         if(strcmp(tmp->varName, symbol_name) == 0)
         {
-            if(tmp->category == category) /*if it already exists don't create a new one*/
+            if(tmp->category == category) /*if it already exists create a new one*/
             {
                 if(tmp->active == 1)
                 {
                     /*printf("symbol %s exists and is already active\n", tmp->varName);*/
                     return NULL;
                 }
-                /*else tmp->active == 0*/
-                tmp->active = 1;    /*there is a symbol that has the same category and scope, so we activate it again*/
-                printf("Activated symbol %s and changed line from %d to %d\n", tmp->varName, tmp->line, line);
+                /*there is a symbol that has the same category and scope, but we add a new one*/
+                elem = malloc(sizeof(symbol));
+                if(elem == NULL)
+                {
+                    fprintf(stderr, "Error in addSymbol, can't create new symbol, not enough memory...\n");
+                    exit(0);
+                }
+                elem->varName = strdup(symbol_name);
+                elem->category = category;
+                elem->active = 1;
+                elem->scope = scope;
+                elem->line = line;
+                elem->nextSym = tmp->nextSym;
+                tmp->nextSym = elem;
+                printf("Added(Activated) symbol %s and changed line from %d to %d\n", tmp->varName, tmp->line, line);
                 /*tmp->line = line;*/   /*keep the line where the symbol was first encountered*/
                 return tmp;
             }

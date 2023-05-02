@@ -16,6 +16,15 @@
     {
         printf("%s\n", msg);
     }
+
+    void check_for_func_error(symbol_T lval)
+    {
+        if(lval != NULL && (lval->category == library_function || lval->category == user_func))
+        {
+            printf(ANSI_COLOR_RED"Syntax error in line <%d>: function %s used as an l-value"ANSI_COLOR_RESET"\n", alpha_yylineno, lval->varName);
+            exit(-1);
+        }
+    }
 %}
 
 %define api.prefix {alpha_yy}
@@ -113,25 +122,53 @@ expr:   assignexpr { printMessage("expr -> assignexpr"); } |
     ;
 
 
-term:   Lparenthesis expr Rparenthesis {  printMessage("term -> (expr)"); } |
-        uminus expr { printMessage("term -> uminus expr");} |
-        NOT expr    { printMessage("ter, -> not expr");} |
-        plusplus lvalue { printMessage("term -> ++lvalue");} |
-        lvalue plusplus { printMessage("term -> lvalue++");} |
-        minusminus lvalue   { printMessage("term -> --lvalue");} |
-        lvalue minusminus   { printMessage("term -> lvalue--");} |
+term:   Lparenthesis expr Rparenthesis {  
+            printMessage("term -> (expr)"); 
+        } |
+        uminus expr { 
+            symbol_T lval = $2;
+
+            check_for_func_error(lval);
+            printMessage("term -> uminus expr");
+            } |
+
+        NOT expr    { 
+            symbol_T lval = $2;
+            
+            check_for_func_error(lval);
+            printMessage("ter, -> not expr");
+            } |
+        plusplus lvalue { 
+            symbol_T lval = $2;
+            
+            check_for_func_error(lval);
+            printMessage("term -> ++lvalue");
+            } |
+        lvalue plusplus { 
+            symbol_T lval = $1;
+            
+            check_for_func_error(lval);
+            printMessage("term -> lvalue++");
+            } |
+        minusminus lvalue   { 
+            symbol_T lval = $2;
+            
+            check_for_func_error(lval);
+            printMessage("term -> --lvalue");
+            } |
+        lvalue minusminus   { 
+            symbol_T lval = $1;
+            
+            check_for_func_error(lval);
+            printMessage("term -> lvalue--");
+            } |
         primary { printMessage("term -> primary");}
     ;
 
 assignexpr:     lvalue assign expr  {
             symbol_T lval = $1;
             
-            if(lval != NULL && (lval->category == library_function || lval->category == user_func))
-            {
-                printf(ANSI_COLOR_RED"Syntax error in line <%d>: function %s used as an l-value"ANSI_COLOR_RESET"\n", alpha_yylineno, lval->varName);
-                exit(-1);
-            }
-
+            check_for_func_error(lval);
             printMessage("assignexpr -> lvalue = expr");}
     ;
 
