@@ -1,13 +1,8 @@
 %{
     #include "symbol_table.h"
-    #include "func_stack.h"
+    #include "stack.h"
     #include "quads.h"
-    #include "funcs.h"
     #include "offset_stack.h"
-
-    #define ANSI_COLOR_RED     "\x1b[41m"
-    #define ANSI_COLOR_GREEN   "\x1b[32m"
-    #define ANSI_COLOR_RESET   "\x1b[0m"
 
     int alpha_yylex(void);
     int alpha_yyerror(char *yaccProvidedMessage);
@@ -16,35 +11,22 @@
     extern char* alpha_yytext;
     extern FILE* alpha_yyin;
 
-    symbol_T anonymusFuncSym = NULL;
-    int scope = 0;
-    int offset = 0;
-    int allowReturn = 0, InsideLoopCounter = 0, InsideFuncCounter = 0, insideLoop = 0;
-    int breakExists = 0, ContinueExists = 0;
+    int scope = 0, offset = 0;
+    int allowReturn = 0;
+    enum scopespace_t curr_space = programmVar;
 
     void  printMessage(char *msg)
     {
         printf("%s\n", msg);
     }
 
-    void check_for_func_error(symbol_T sym)
+    void check_for_func_error(symbol_T lval)
     {
-        if(sym != NULL && sym->category == 4)
+        if(lval != NULL && (lval->category == library_function || lval->category == user_func))
         {
-            printf("Syntax error in line %d: function cannot be used as a variable\n", alpha_yylineno);
+            printf(ANSI_COLOR_RED"Syntax error in line <%d>: function %s used as an l-value"ANSI_COLOR_RESET"\n", alpha_yylineno, lval->varName);
             exit(-1);
         }
-    }
-
-    /*returns an enumurated value based on the my function stack*/
-    enum scopespace_t getSpace()
-    {
-        stack_T tmp = func_pop();
-        if(tmp == NULL) /*no function symbols in the stack means we are not in a function definition*/
-            return programmVar;
-        /*else*/
-        func_push(tmp->name, tmp->scope);
-        return functionLocal;
     }
 
     void typeCheck(expr_P exp1, expr_P exp2)
@@ -65,7 +47,7 @@
 %}
 
 %define api.prefix {alpha_yy}
-%error-verbose
+%define parse.error verbose
 
 %start program
 
@@ -97,7 +79,7 @@
 %nonassoc greater ge less le
 %left plus minus
 %left mul divide mod
-%right NOT plusplus minusminus
+%right NOT plusplus minusminus uminus
 %left dot dotdot
 %left LSquareBracket RSquareBracket
 %left Lparenthesis Rparenthesis
@@ -107,10 +89,10 @@
 
 
 
-program:    stmts{ printMessage("program -> stmts\nAccepted!"); writeQuadsToFile(); print_symbol_table();}
+program:    stmts{ printMessage("program -> stmts\n"ANSI_COLOR_GREEN"Accepted!"ANSI_COLOR_RESET); print_symbol_table();}
     ;
 
-stmts:  stmts stmt { printMessage("stmts -> statement kleene star"); resetTemp();}
+stmts:  stmts stmt { printMessage("stmts -> statement kleene star");}
         | 
     ;
 
@@ -119,26 +101,28 @@ stmt:   expr Semicolon { printMessage("stmt -> exp;");} |
         whilestmt { printMessage("stmt -> while statement");} |
         forstmt { printMessage("stmt -> for statement");}  |
         returnstmt { printMessage("stmt -> return statement");} |
-        BREAK Semicolon {
-            if(insideLoop == 0)
+        BREAK Semicolon { 
+            stack_T elem = pop_loop();
+            if(elem == NULL)
             {
-                printf("Syntax error: break usage is not allowed outside of a loop\n");
+                printf(ANSI_COLOR_RED"Syntax error in line <%d>: break usage is not allowed outside of a loop"ANSI_COLOR_RESET"\n", alpha_yylineno);
                 exit(-1);
             }
+            push_loop(elem->name, elem->scope);
             mark_break_quad();
             emit(jump, NULL, NULL, NULL, alpha_yylineno);
-            breakExists++;
             printMessage("stmt -> break; statement");
         } |
-        CONTINUE Semicolon {
-            if(insideLoop == 0)
+        CONTINUE Semicolon { 
+            stack_T elem = pop_loop();
+            if(elem == NULL)
             {
-                printf("Syntax error: break usage is not allowed outside of a loop\n");
+                printf(ANSI_COLOR_RED"Syntax error in line <%d>: continue usage is not allowed outside of a loop"ANSI_COLOR_RESET"\n", alpha_yylineno);
                 exit(-1);
             }
+            push_loop(elem->name, elem->scope);
             mark_continue_quad();
             emit(jump, NULL, NULL, NULL, alpha_yylineno);
-            ContinueExists++;
             printMessage("stmt -> continue; statement");
         } |
         block { printMessage("stmt -> block statement");} |
@@ -275,11 +259,11 @@ expr:   assignexpr { printMessage("expr -> assignexpr"); } |
     ;
 
 
-term:   Lparenthesis expr Rparenthesis { 
+term:   Lparenthesis expr Rparenthesis {  
             $$ = $2;
             printMessage("term -> (expr)"); 
         } |
-        minus expr {
+        uminus expr { 
             expr_P exprPtr = $2;
             
             check_for_func_error(exprPtr->sym);
@@ -297,7 +281,7 @@ term:   Lparenthesis expr Rparenthesis {
             emit(iop_NOT, result, $2, NULL, alpha_yylineno);    /*or i could use a function like emit_rel_op() and use if_eq and jumps*/
             printMessage("term -> not expr");
         } |
-        plusplus lvalue {
+        plusplus lvalue { 
             $$ = $2;
             expr_P exprPtr = $2, numExpr = newExpr(constnum_e, NULL);
             numExpr->numConst = 1;
@@ -306,7 +290,7 @@ term:   Lparenthesis expr Rparenthesis {
             emit(iop_add, exprPtr, exprPtr, numExpr, alpha_yylineno);   /*pre increment*/
             printMessage("term -> ++lvalue");
         } |
-        lvalue plusplus {
+        lvalue plusplus { 
             expr_P exprPtr = $1, numExpr = newExpr(constnum_e, NULL);
             numExpr->numConst = 1;
             symbol_T temp = newTemp(&offset, getSpace());
@@ -318,7 +302,7 @@ term:   Lparenthesis expr Rparenthesis {
             emit(iop_add, exprPtr, exprPtr, numExpr, alpha_yylineno);
             printMessage("term -> lvalue++");
         } |
-        minusminus lvalue   {
+        minusminus lvalue   { 
             $$ = $2;
             expr_P exprPtr = $2, numExpr = newExpr(constnum_e, NULL);
             numExpr->numConst = 1;
@@ -327,7 +311,7 @@ term:   Lparenthesis expr Rparenthesis {
             emit(iop_sub, exprPtr, exprPtr, numExpr, alpha_yylineno);   /*pre decrement*/
             printMessage("term -> --lvalue");
         } |
-        lvalue minusminus   {
+        lvalue minusminus   { 
             expr_P exprPtr = $1, numExpr = newExpr(constnum_e, NULL);
             numExpr->numConst = 1;
             symbol_T temp = newTemp(&offset, getSpace());
@@ -339,9 +323,18 @@ term:   Lparenthesis expr Rparenthesis {
             emit(iop_sub, exprPtr, exprPtr, numExpr, alpha_yylineno);
             printMessage("term -> lvalue--");
         } |
-        primary { $$ = $1; printMessage("term -> primary");}
+        primary { printMessage("term -> primary");}
     ;
 
+assignexpr:     lvalue assign expr  {
+            symbol_T lval = $1;
+            
+            check_for_func_error(lval);
+
+            
+            printMessage("assignexpr -> lvalue = expr");
+        }
+    ;
 assignexpr:     lvalue assign expr  {
             expr_P exprPtr = $1, tmp = NULL, result = NULL, prev_result = NULL, final_result = NULL;
             symbol_T temp = NULL;
@@ -436,60 +429,63 @@ assignexpr:     lvalue assign expr  {
 primary:    lvalue  {
                 $$ = $1;
                 printMessage("primary -> lvalue"); 
-        }    |
+            }    |
             call    { $$ = $1; printMessage("primary -> call"); }    |
             objectdef   { $$ = $1; printMessage("primary -> objectdef"); }   |
             Lparenthesis funcdef Rparenthesis { $$ = $2; printMessage("primary -> (funcdef)"); } |
             const   { $$ = $1; printMessage("primary -> const"); }
     ;
 
-lvalue:     ID  { 
+lvalue:     ID  {
                     symbol_T sym = search_from_scope_out($1, scope);
-                    stack_T stackPtr = NULL;
+                    enum SymbolCategory category;
                     expr_P exprPtr = NULL;
 
                     if(sym == NULL) /*if you can't find anything add new symbol*/
                     {
-                        sym = addElement($1, 1, scope, alpha_yylineno, offset, getSpace());
-                        offset++;   /*+1 memory space for variable*/
+                        if(scope == 0)
+                            category = global_var;
+                        else
+                            category = local_var;
+
+                        sym = addSymbol($1, category, scope, alpha_yylineno, offset, curr_space);
+                        offset++;
                         printf("Added symbol\n");
                     }
+                    /*else sym != NULL*/
                     else if(sym->scope != 0) /*if you find a global var, refer to that. if you are inside a function you can't access anything except global or args or local*/
                     {
-                        stackPtr = func_pop();/*check the function stack and if symbol scope <= of function then error*/
-                        if(stackPtr != NULL && sym->scope <= stackPtr->scope)
+                        /*check the function stack and if symbol scope <= of function then error*/
+                        symbol_T tmp = getActiveFunctionFromScopeOut(scope-1);  /*functions stay active after their block is closed, so for this search to be correct we need to look 1 level higher*/
+                        
+                        if(tmp != NULL && sym->scope <= tmp->scope)
                         {
-                            printf("Syntax error in line %d: cannot access %s in scope %d\n", alpha_yylineno, $1, sym->scope);
+                            printf(ANSI_COLOR_RED"Syntax error in line <%d>: cannot access %s inside function."ANSI_COLOR_RESET"\n", alpha_yylineno, $1);
                             exit(-1);   /*call yacc error manager*/
                         }
-                        else if(stackPtr != NULL)
-                            func_push(stackPtr->name, stackPtr->scope);
                     }
-                    
+
                     exprPtr = newExpr(var_e, sym);
-                    $$ = exprPtr; 
-                    printf("lvalue -> ID\n"); 
-                }   |
-            local ID    { 
-                    symbol_T sym = search_from_scope_out($2, scope);
+                    $$ = exprPtr;
+                    printf("lvalue -> ID\n");
+            }   |
+            local ID    {
+                    symbol_T sym = getElement($2, scope);
                     expr_P exprPtr = NULL;
 
-                    if(is_lib_func($2) == 1 && scope != 0)
-                    {
-                        printf("Syntax error in line %d: can't use library function name %s as local var.\n", alpha_yylineno, $2);
-                        exit(-1);
-                    } else if(sym!= NULL && sym->category == 2 && sym->active == 1)
+                    if(sym!= NULL && sym->category == func_arg && sym->active == 1)
                     {
                         /*printf("local x == arg x\n");*/
                     } 
                     else if (scope == 0) /*if global ignore local*/
                     {
-                        sym = addElement($2, 1, scope, alpha_yylineno, offset, getSpace()); 
+                        sym = addSymbol($2, global_var, scope, alpha_yylineno, offset, curr_space);
                         offset++;
+                        printf("Added global %s (ignored local)\n", $2);
                     }
                     else
                     {
-                        sym = addElement($2, 3, scope, alpha_yylineno, offset, getSpace()); 
+                        sym = addSymbol($2, local_var, scope, alpha_yylineno, offset, curr_space);
                         offset++;
                         printf("Added local %s\n", $2);
                     }
@@ -497,20 +493,21 @@ lvalue:     ID  {
                     exprPtr = newExpr(var_e, sym);
                     $$ = exprPtr;
                     printMessage("lvalue -> local ID"); 
-                } |
+            } |
             coloncolon ID   {
-                symbol_T sym = getElement($2, 0);
+                symbol_T sym = getElement($2, 0); /*:: means we search in global scope*/
                 expr_P exprPtr = NULL;
+
                 if(sym == NULL)
                 {
-                    printf("Syntax error in line %d: no global %s variable or function\n", alpha_yylineno, $2);
+                    printf(ANSI_COLOR_RED"Syntax error in line <%d>: no global variable or function %s"ANSI_COLOR_RESET"\n", alpha_yylineno, $2);
                     exit(-1);
                 }
                 
                 exprPtr = newExpr(var_e, sym);
                 $$ = exprPtr;
-                printMessage("lvalue -> :: ID");
-     } |
+                printMessage("lvalue -> :: ID"); 
+            } |
             member  { $$ = $1; printMessage("lvalue -> member"); }
     ;
 
@@ -603,58 +600,57 @@ indexedelem:    LCurlyBracket expr colon expr RCurlyBracket { printMessage("inde
 block: LCurlyBracket {scope++; printf("block scope %d\n", scope);} stmts RCurlyBracket { hide_in_scope(scope); scope--; printMessage("block -> {stmts}"); } 
     ;
 
-funcdef:    FUNCTION ID 
-            {
+funcdef:    FUNCTION ID {
                 symbol_T sym = getElement($2, scope);
-                if(is_lib_func($2) == 1)
+                if(sym != NULL)
                 {
-                    printf("Syntax error in line %d: shadowing of library function %s\n", alpha_yylineno, $2);
+                    printf(ANSI_COLOR_RED"Syntax error in line <%d>: redeclaration of %s as function"ANSI_COLOR_RESET"\n", alpha_yylineno, $2);
                     exit(-1);
                 }
-                else if(sym != NULL)
-                {
-                    printf("Syntax error in line %d: redeclaration of %s as function\n", alpha_yylineno, $2);
-                    exit(-1);
-                }
+                addSymbol($2, user_func, scope, alpha_yylineno, offset, curr_space); 
+
                 
-                sym = addElement($2, 4, scope, alpha_yylineno, offset, getSpace()); /*first getspace() then func_push()*/
-                func_push($2, scope);
                 offset++;   /*functions count as variables?*/
                 offset_push(offset);
                 expr_P expr = newExpr(programfunc_e, sym);
                 mark_quad();
-                emit(jump, NULL, NULL, NULL, alpha_yylineno); /*create empty jump that will fill later with the label being the end of this function*/
+                emit(jump, NULL, NULL, NULL, alpha_yylineno); /*create empty jump that will later be filled with the end of this function*/
                 emit(funcstart, expr, NULL, NULL, alpha_yylineno);
-                printf("OFFSET BEFORE FUNC %d\n", offset);offset = 0; 
+
+                printf("OFFSET BEFORE FUNC %d\n", offset);
+                offset = 0;
             } 
-            Lparenthesis idlist { printf("formal args counter : %d\n", offset); 
-            } Rparenthesis {
-                allowReturn++; InsideFuncCounter++; insideLoop = 0;
-            } block  {
-            symbol_T sym = getElement($2, scope);
-            expr_P expr = newExpr(programfunc_e, sym);
-            emit(funcend, expr, NULL, NULL, alpha_yylineno);
-            patchLabel();
-            allowReturn--;
-            InsideFuncCounter--;
-            if(InsideLoopCounter > InsideFuncCounter)
-            {
-                insideLoop = 1;
+            Lparenthesis idlist {
+                curr_space = functionLocal;
+                printf(ANSI_COLOR_GREEN"formal args counter : %d"ANSI_COLOR_RESET"\n", offset);
             }
-            offset_stack_T offsettmp = offset_pop();
-            offset = offsettmp->offset; printf("OFFSET AFTER FUNC %d\n", offset);
-            func_pop();
-            printMessage("funcdef -> function id(idlist){stmts}"); 
-    }   |
+            Rparenthesis {allowReturn++;} 
+            block  {
+                symbol_T sym = getElement($2, scope);
+                expr_P expr = newExpr(programfunc_e, sym);
+
+                emit(funcend, expr, NULL, NULL, alpha_yylineno);
+                patchLabel();
+                allowReturn--;
+                
+                offset_stack_T offsettmp = offset_pop();
+                offset = offsettmp->offset; printf("OFFSET AFTER FUNC %d\n", offset);
+                printMessage("funcdef -> function id(idlist){stmts}");
+            }   |
+            FUNCTION {add_anonymus_func(scope, alpha_yylineno);} Lparenthesis idlist Rparenthesis {allowReturn++;} block {
+                allowReturn--;
+                printMessage("funcdef -> function(idlist){}"); 
+            }
             FUNCTION {
-                symbol_T sym = add_anonymus_func(scope, alpha_yylineno, offset, getSpace());
-                func_push(sym->varName, scope);
+                symbol_T sym = add_anonymus_func(scope, alpha_yylineno, offset, curr_space);
+
                 offset++;   /*functions count as variables?*/
                 offset_push(offset);
                 allowReturn++;
+
                 expr_P expr = newExpr(programfunc_e, sym);
                 mark_quad();
-                emit(jump, NULL, NULL, NULL, alpha_yylineno); /*create empty jump that will fill later with the label being the end of this function*/
+                emit(jump, NULL, NULL, NULL, alpha_yylineno);
                 emit(funcstart, expr, NULL, NULL, alpha_yylineno);
                 printf("OFFSET BEFORE FUNC %d\n", offset);
                 
@@ -704,36 +700,30 @@ const:  NUMBER  {
     ;
 
 idlist:     ID  { 
-            symbol_T sym = getElement($1, scope+1);
-            if(sym != NULL && sym->scope == scope && sym->active == 1)
-            {
-                printf("Syntax error in line %d: argument %s is already declared\n", alpha_yylineno, $1);
-                exit(-1);
-            }
-            else if(is_lib_func($1) == 1)
-            {
-                printf("Syntax error in line %d: formal shadows library function %s\n", alpha_yylineno, $1);
-                exit(-1);
-            }
-            addElement($1, 2, scope+1, alpha_yylineno, offset, formalArg);
-            offset++;
-            printMessage("idlist -> ID"); 
-    }   |
-            idlist comma ID {
-                symbol_T sym = getElement($3, scope+1);
-                if(sym != NULL && sym->scope == scope && sym->active == 1)
-                {
-                    printf("Syntax error in line %d: argument %s is already declared\n", alpha_yylineno, $3);
-                    exit(-1);
-                }
-                else if(is_lib_func($3) == 1)
-                {
-                    printf("Syntax error in line %d: formal shadows library function %s\n", alpha_yylineno, $3);
-                    exit(-1);
-                }
-                addElement($3, 2, scope+1, alpha_yylineno, offset, formalArg);
+                curr_space = formalArg;
+                symbol_T sym = addSymbol($1, func_arg, scope+1, alpha_yylineno, offset, curr_space);
                 offset++;
-                printMessage("idlist -> idlist,ID");} |
+
+                if(sym == NULL)
+                {
+                    printf(ANSI_COLOR_RED"Syntax error in line <%d>: argument %s is already declared"ANSI_COLOR_RESET"\n", alpha_yylineno, $1);
+                    exit(-1);
+                }
+                printMessage("idlist -> ID"); 
+            }   |
+            idlist comma ID { 
+                curr_space = formalArg;
+                symbol_T sym = addSymbol($3, func_arg, scope+1, alpha_yylineno, offset, curr_space);
+                offset++;
+
+                if(sym == NULL)
+                {
+                    printf(ANSI_COLOR_RED"Syntax error in line <%d>: argument %s is already declared"ANSI_COLOR_RESET"\n", alpha_yylineno, $1);
+                    exit(-1);
+                }
+                
+                printMessage("idlist -> idlist,ID"); 
+            }   |
                 { printMessage("idlist -> empty"); }
     ;
 
@@ -772,8 +762,7 @@ ifstmt :    ifstmtprefix stmt {
         }
     ;
 
-
-whilestmt:   WHILE Lparenthesis { mark_quad(); } expr Rparenthesis {
+whilestmt:   WHILE { push_loop(NULL, scope); }  Lparenthesis { mark_quad(); } expr Rparenthesis {
                 expr_P result = $4;
                 expr_P numExpr = newExpr(constnum_e, NULL);
                 numExpr->numConst = 1;
@@ -785,8 +774,6 @@ whilestmt:   WHILE Lparenthesis { mark_quad(); } expr Rparenthesis {
 
                 mark_quad();
                 emit(if_noteq, result, numExpr, NULL, alpha_yylineno);    /*if expr != TRUE then jump away*/
-                InsideLoopCounter++;
-                insideLoop = 1;
                 push_break_count(breakExists);  /*store the prev counter for break before stmts begin*/
                 push_continue_count(ContinueExists);
                 breakExists = 0;
@@ -806,19 +793,15 @@ whilestmt:   WHILE Lparenthesis { mark_quad(); } expr Rparenthesis {
                     patchContinueLabel(exprQuadStart);
                     ContinueExists--;
                 }
-                InsideLoopCounter--;
-                if(InsideLoopCounter == 0)
-                {
-                    insideLoop = 0;
-                }
                 breakExists = pop_break_count();
                 ContinueExists = pop_continue_count();
+
+                pop_loop();
                 printMessage("whilestmt -> while (expr) stmt"); 
             } 
     ;
 
-
-forstmt:    FOR Lparenthesis elist Semicolon { mark_queue_quad(); /*(1)mark the start of expr*/} expr {
+forstmt:    FOR { push_loop(NULL, scope); } Lparenthesis elist Semicolon { mark_queue_quad(); /*(1)mark the start of expr*/} expr {
                 expr_P result = $6;
                 expr_P numExpr = newExpr(constnum_e, NULL);
                 numExpr->numConst = 1;
@@ -841,8 +824,6 @@ forstmt:    FOR Lparenthesis elist Semicolon { mark_queue_quad(); /*(1)mark the 
 
             } Rparenthesis {
                 patchArg2Label();   /*(2)patch jump to the start of stmts*/
-                InsideLoopCounter++;
-                insideLoop = 1;
                 push_break_count(breakExists);  /*store the prev counter for break before stmts begin*/
                 push_continue_count(ContinueExists);
                 breakExists = 0;
@@ -863,32 +844,29 @@ forstmt:    FOR Lparenthesis elist Semicolon { mark_queue_quad(); /*(1)mark the 
                     patchContinueLabel(exprQuadStart);
                     ContinueExists--;
                 }
-                InsideLoopCounter--;
-                if(InsideLoopCounter == 0)
-                {
-                    insideLoop = 0;
-                }
                 breakExists = pop_break_count();
                 ContinueExists = pop_continue_count();
+
+                pop_loop();
                 printMessage("forstmt -> for(elist;expr;elist)stmt"); 
             }  
     ;
 
 
-returnstmt: RETURN Semicolon {
+returnstmt: RETURN Semicolon { 
                 if(allowReturn == 0)
                 {
-                    printf("Syntax error: return is not allowed outside of a function\n");
+                    printf(ANSI_COLOR_RED"Syntax error in line <%d>: return is not allowed outside of a function"ANSI_COLOR_RESET"\n", alpha_yylineno);
                     exit(-1);
                 }
                 emit(ret, NULL, NULL, NULL, alpha_yylineno);
                 printMessage("returnstmt -> return;"); 
-        }    |
-            RETURN expr Semicolon   {
+            }    |
+            RETURN expr Semicolon   { 
                 expr_P expr = $2;
                 if(allowReturn == 0)
                 {
-                    printf("Syntax error: return is not allowed outside of a function\n");
+                    printf(ANSI_COLOR_RED"Syntax error in line <%d>: return is not allowed outside of a function"ANSI_COLOR_RESET"\n", alpha_yylineno);
                     exit(-1);
                 }
                 emit(ret, expr, NULL, NULL, alpha_yylineno);    /*return the expr*/
@@ -899,7 +877,8 @@ returnstmt: RETURN Semicolon {
 
 int alpha_yyerror(char *yaccProvidedMessage)
 {
-    fprintf(stderr, "%s: at line %d, before token: '%s'\n", yaccProvidedMessage, alpha_yylineno, alpha_yytext);
+    fprintf(stderr, "%s: at line %d, before token: %s\n", yaccProvidedMessage, alpha_yylineno, alpha_yytext);
+    fprintf(stderr, "Input not valid\n");
 }
 
 int main(int argc, char **argv) 

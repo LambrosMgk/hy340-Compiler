@@ -177,12 +177,12 @@ undefined [^keyword^operator^integer^real^string^punctuation^id^whitespace]
 				while(tmp->next != NULL)
 				{
 					fprintf(alpha_yyout, "While loop\n");
-					fprintf(alpha_yyout, ANSI_COLOR_RED"Error comment in line %d col %d is not closed\n"ANSI_COLOR_RESET, tmp->lineno, tmp->col);
+					fprintf(alpha_yyout, ANSI_COLOR_RED"Error comment in line %d col %d is not closed"ANSI_COLOR_RESET"\n", tmp->lineno, tmp->col);
 					tmp = tmp->next;
 					free(tmp->prev);	/*also delete the list*/
 				}
 				
-				fprintf(alpha_yyout, ANSI_COLOR_RED"Error comment in line %d col %d is not closed\n"ANSI_COLOR_RESET, tmp->lineno, tmp->col);
+				fprintf(alpha_yyout, ANSI_COLOR_RED"Error comment in line %d col %d is not closed"ANSI_COLOR_RESET"\n", tmp->lineno, tmp->col);
 				free(tmp);
 				break;
 			}
@@ -203,8 +203,6 @@ undefined [^keyword^operator^integer^real^string^punctuation^id^whitespace]
 	while(c != '\n')	/*ignore everything except \n*/
 	{
 		c = input();
-		if(c == 0)
-			break;
 	}
 	resetColCounter();
 }
@@ -294,9 +292,7 @@ undefined [^keyword^operator^integer^real^string^punctuation^id^whitespace]
 	fprintf(alpha_yyout, "Line <%d> Col <%d>: #<%d> \"%s\" INTEGER\n", alpha_yylineno, column, ++total_tokens, alpha_yytext);
 	addColCounter(alpha_yyleng);
 
-	double d;
-	sscanf(alpha_yytext, "%lf", &d);
-	alpha_yylval.doubleval = d;
+	alpha_yylval.intVal = atoi(alpha_yytext);
 
 	return NUMBER;
 }
@@ -319,7 +315,7 @@ undefined [^keyword^operator^integer^real^string^punctuation^id^whitespace]
 			else
 			{
 				
-				fprintf(alpha_yyout, ANSI_COLOR_YELLOW"Warning : invalid escape character \'%c\' on string line %d col %d.\n"ANSI_COLOR_RESET,alpha_yytext[i+1], alpha_yylineno, column + i);
+				fprintf(alpha_yyout, ANSI_COLOR_YELLOW"Warning : invalid escape character \'%c\' on string line %d col %d."ANSI_COLOR_RESET"\n",alpha_yytext[i+1], alpha_yylineno, column + i);
 			}
 		}
 	}
@@ -374,7 +370,7 @@ undefined [^keyword^operator^integer^real^string^punctuation^id^whitespace]
 }
 
 "\"" {
-	fprintf(alpha_yyout, ANSI_COLOR_RED"Error : string in line %d col %d is not closed. Exiting...\n"ANSI_COLOR_RESET, yylineno, column);
+	fprintf(alpha_yyout, ANSI_COLOR_RED"Error : string in line %d col %d is not closed. Exiting..."ANSI_COLOR_RESET"\n", yylineno, column);
 	exit(-1);
 }
 
