@@ -13,7 +13,6 @@ unsigned int total = 0;
 unsigned int currQuad = 0;
 unsigned int tmpcounter = 0, totaltmp = 0;
 
-
 void expand(void)
 {
     assert(total == currQuad);
@@ -27,195 +26,82 @@ void expand(void)
     total += EXPAND_SIZE;
 }
 
-void emit_rel_op(enum iopcode op, expr* result, expr* arg1, expr* arg2, unsigned line)
-{
-    quad *p = quads + currQuad++;   /*if condition true jump 3 quads*/
-    p->op = op;
-    p->result = arg1;
-    p->arg1 = arg2;
-    p->arg2 = newExpr(constnum_e, NULL);
-    p->arg2->numConst = currQuad + 3;
-    p->label = currQuad;
-    p->line = line;
-
-    if(currQuad == total)
-        expand();
-    p = quads + currQuad++;     /*else assign false*/
-    p->op = iop_assign;
-    p->result = result;         /*result will already have a var expr*/
-    p->arg1 = newExpr(constbool_e, NULL);
-    p->arg1->boolConst = 0;
-    p->arg2 = NULL;
-    p->label = currQuad;
-    p->line = line;
-
-    if(currQuad == total)
-        expand();
-    p = quads + currQuad++;
-    p->op = jump;               /*and jump away!*/
-    p->result = newExpr(constnum_e, NULL);
-    p->result->numConst = currQuad + 2;
-    p->arg1 = NULL;
-    p->arg2 = NULL;
-    p->label = currQuad;
-    p->line = line;
-
-    if(currQuad == total)
-        expand();
-    p = quads + currQuad++;
-    p->op = iop_assign;
-    p->result = result;         /*result will already have a var expr*/
-    p->arg1 = newExpr(constbool_e, NULL);
-    p->arg1->boolConst = 1;
-    p->arg2 = NULL;
-    p->label = currQuad;
-    p->line = line;
-}
-
-void emit(enum iopcode op, expr* result, expr* arg1, expr* arg2, unsigned line)
+void emit(enum iopcode op, expr* result, expr* arg1, expr* arg2, unsigned int label, unsigned int line)
 {
     if(currQuad == total)
         expand();
 
     quad *p = quads + currQuad++;   /*pointer arithmetic for quads array*/
     p->op = op;
+    p->result = result;
     p->arg1 = arg1;
     p->arg2 = arg2;
-    p->result = result;
-    p->label = currQuad;   /*currQuad will be used as label*/
+    p->label = label;
     p->line = line;
 }
 
-void mark_quad()
+int nextQuadLabel()
 {
-    JumpStackTop = QuadNode_Stack_push(JumpStackTop, currQuad);   /*-1 depends if you call mark_quad() before emit() or after*/
-}
-/*exists to help me with the false jump on for loop*/
-void mark_next_quad()
-{
-    JumpStackTop = QuadNode_Stack_push(JumpStackTop, currQuad+1);
+    return currQuad;
 }
 
-void mark_queue_quad()
+logicList* makelist(int quadno)
 {
-    QueueHead = QuadNode_Queue_push(QueueHead, currQuad);
+
+	logicList* list = (logicList*) malloc(sizeof(logicList));
+	memset(list,0,sizeof(logicList));
+	list->quadNum = quadno;
+	list->next = NULL;
+	return list;
+
 }
 
-void mark_break_quad()
+logicList* mergeLocicLists(logicList* list1, logicList* list2)
 {
-    BreakStack = QuadNode_Stack_push(BreakStack, currQuad);
+	logicList* tmp = NULL;
+
+	if(list1 == NULL && list2 == NULL)
+		return NULL;
+	else if(list1 == NULL && list2 != NULL)
+		return list2;
+	else if(list1 != NULL && list2 == NULL)
+		return list1;
+	else
+    {
+		tmp = list1;
+		while(tmp->next != NULL)
+        {
+			tmp = tmp->next;
+		}
+		tmp->next = list2;
+		return list1;
+	}
+
+    return NULL;
 }
 
-void push_break_count(int breakNum)
+void backPatchList(logicList* list, int quadno)
 {
-    BreakCounterStack = QuadNode_Stack_push(BreakCounterStack, breakNum);
+	logicList* tmp = list;
+
+	while(tmp != NULL)
+    {
+		patchLabel(tmp->quadNum,quadno);
+		tmp = tmp->next;
+	}
 }
 
-int pop_break_count(void)
+void patchLabel(unsigned int quadnumber, unsigned int label)
 {
-    int result = 0;
-    BreakCounterStack = QuadNode_Stack_pop(BreakCounterStack, &result);
-    return result;
-}
-
-void patchBreakLabel()
-{
-    int quadNum = -1;
-    BreakStack = QuadNode_Stack_pop(BreakStack, &quadNum);
-    quad *p = quads + quadNum;
+    if(quadnumber >= currQuad)
+    {
+        printf("patchLabel call with wrong arguments, quadnum : %d, label : %d\n", quadnumber, label);
+        exit(-1);
+    }
+    
     expr_P expr = newExpr(constnum_e, NULL);
-    expr->numConst = currQuad+1;
-    p->result = expr;
-}
-
-void mark_continue_quad()
-{
-    ContinueStack = QuadNode_Stack_push(ContinueStack, currQuad);
-}
-
-void push_continue_count(int breakNum)
-{
-    ContinueCounterStack = QuadNode_Stack_push(ContinueCounterStack, breakNum);
-}
-
-int pop_continue_count(void)
-{
-    int result = 0;
-    ContinueCounterStack = QuadNode_Stack_pop(ContinueCounterStack, &result);
-    return result;
-}
-
-void patchContinueLabel(int ExprStartQuad)
-{
-    int quadNum = -1;
-    ContinueStack = QuadNode_Stack_pop(ContinueStack, &quadNum);
-    quad *p = quads + quadNum;
-    expr_P expr = newExpr(constnum_e, NULL);
-    expr->numConst = ExprStartQuad;
-    p->result = expr;
-}
-
-/*returns the label it patched in case we have an "else" afterwards so "else" will fix it*/
-int patchArg2Label()
-{
-    int quadNum = -1;
-    JumpStackTop = QuadNode_Stack_pop(JumpStackTop, &quadNum);
-    quad *p = quads + quadNum;
-    expr_P expr = newExpr(constnum_e, NULL);
-    expr->numConst = currQuad+1;
-    p->arg2 = expr;
-
-    return quadNum;
-}
-
-void patchELSEjump(int quadNum)
-{
-    quad *p = quads + quadNum;
-    p->arg2->numConst++;    /*go after the "jump" to execute the stmts of ELSE (otherwise else won't be executed it'll jump away)*/
-}
-/*patch the quad you just emitted to jump to the +2 quad*/
-void patchEmittedResult()
-{
-    quad *p = quads + currQuad-1;
-    expr_P expr = newExpr(constnum_e, NULL);
-    expr->numConst = currQuad+2;
-    p->result = expr;
-}
-
-/*patch the jump quad (that you just emitted) of a loop with the help of a queue*/
-int patch_loop_label()
-{
-    int quadNum = -1;
-    QueueHead = QuadNode_Queue_pop(QueueHead, &quadNum);
-    quad *p = quads + currQuad-1;
-    expr_P expr = newExpr(constnum_e, NULL);
-    expr->numConst = quadNum+1;
-    p->result = expr;
-
-    return quadNum+1;
-}
-
-int patch_thisResult_FromStack()
-{
-    int quadNum = -1;
-    JumpStackTop = QuadNode_Stack_pop(JumpStackTop, &quadNum);
-    quad *p = quads + currQuad-1;
-    expr_P expr = newExpr(constnum_e, NULL);
-    expr->numConst = quadNum+1;
-    p->result = expr;
-
-    return quadNum+1;
-}
-
-/*with the use of jumpStack_pop() (and jumpStack_push() in emit()) recognizes an empty jump quad and patches it (used in funcdef and ELSE)*/
-void patchLabel()
-{
-    int quadNum = -1;
-    JumpStackTop = QuadNode_Stack_pop(JumpStackTop, &quadNum);
-    quad *p = quads + quadNum;
-    expr_P expr = newExpr(constnum_e, NULL);
-    expr->numConst = currQuad+1;
-    p->result = expr;
+    expr->numConst = label;
+	quads[quadnumber].arg2 = expr;
 }
 
 expr_P newExpr(enum expr_t type, symbol* sym)
@@ -231,7 +117,10 @@ expr_P newExpr(enum expr_t type, symbol* sym)
     expr->type = type;
     expr->sym = sym;
     expr->index = NULL;
+    expr->indexedVal = NULL;
     expr->next = NULL;
+    expr->truelist = NULL;
+    expr->falselist = NULL;
 
     return expr;
 }
@@ -253,7 +142,7 @@ symbol* newTemp(int *offset, enum scopespace_t space)
         }
         name = malloc(5*sizeof(char));/*_t and \0 are 3 chars and 2 chars for digits allowing up to 100 temporary variables*/
         snprintf(name, 5, "_t%d", totaltmp);/*gives a new name for a temporary variable every time it is called based on a global counter*/
-        elem = addElement(name, 1, 0, 0, *offset, space);
+        elem = addSymbol(name, global_var, 0, 0, *offset, space);
         *offset++;
         totaltmp++;
         tmpcounter++;
@@ -285,7 +174,7 @@ void writeQuadsToFile()
         exit(-1);
     }
 
-    fprintf(out, "quad#     opcode              result                      arg1                arg2                label\n");
+    fprintf(out, "quad#     opcode              result                      arg1                arg2                \n");
     fprintf(out, "----------------------------------------------------------------------------------------------------------------\n");
     for(int i = 0; i < currQuad; i++)
     {
@@ -296,12 +185,22 @@ void writeQuadsToFile()
             fprintf(out, "  result: ----------,      ");
         else if(p->result->type == constnum_e)
             fprintf(out, "  result: %10f,     ", p->result->numConst);
-        else if(p->result->type == constbool_e)
-            fprintf(out, "  result: %10d,     ", p->result->boolConst);
+        else if(p->result->type == constbool_e || p->result->type == boolexpr_e)
+        {
+            if(p->result->sym != NULL)  /*first check if i gave it a temp varable*/
+                fprintf(out, "  result: %10s,    ", p->result->sym->varName);
+            else if(p->result->boolConst == 0)
+                fprintf(out, "  result: %10s,    ", "FALSE");
+            else
+                fprintf(out, "  result: %10s,    ", "TRUE");
+        }
         else if(p->result->type == conststring_e || p->result->type == tableitem_e)
             fprintf(out, "  result: %10s,    ", p->result->strConst);
-        else   /* p->result->sym != NULL, result must always be a variable*/
+        else if(p->result->sym != NULL)/* p->result->sym != NULL, result must always be a variable*/
             fprintf(out, "  result: %10s,     ", p->result->sym->varName);
+        else
+            fprintf(out, "  result: ???????????");
+
 
         if(p->arg1 == NULL)
         {
@@ -315,8 +214,13 @@ void writeQuadsToFile()
             }
             else if(p->arg1->type == constnum_e)
                 fprintf(out, "  arg1: %10f,    ", p->arg1->numConst);
-            else if(p->arg1->type == constbool_e)
-                fprintf(out, "  arg1: %10d,    ", p->arg1->boolConst);
+            else if(p->arg1->type == constbool_e || p->arg1->type == boolexpr_e)
+            {
+                if(p->arg1->boolConst == 0)
+                    fprintf(out, "  arg1: %10s,    ", "FALSE");
+                else
+                    fprintf(out, "  arg1: %10s,    ", "TRUE");
+            }
             else if(p->arg1->type == conststring_e || p->arg1->type == tableitem_e)
                 fprintf(out, "  arg1: %10s,    ", p->arg1->strConst);
             else if(p->arg1->type == nil_e)
@@ -332,8 +236,13 @@ void writeQuadsToFile()
                 fprintf(out, "  arg2: %10s,   ", p->arg2->sym->varName);
             else if(p->arg2->type == constnum_e)
                 fprintf(out, "  arg2: %10f,    ", p->arg2->numConst);
-            else if(p->arg2->type == constbool_e)
-                fprintf(out, "  arg2: %10d,    ", p->arg2->boolConst);
+            else if(p->arg2->type == constbool_e || p->arg2->type == boolexpr_e)
+            {
+                if(p->arg2->boolConst == 0)
+                    fprintf(out, "  arg2: %10s,    ", "FALSE");
+                else
+                    fprintf(out, "  arg2: %10s,    ", "TRUE");
+            }
             else if(p->arg2->type == conststring_e || p->arg2->type == tableitem_e)
                 fprintf(out, "  arg2: %10s,    ", p->arg2->strConst);
             else if(p->arg2->type == nil_e)

@@ -6,7 +6,7 @@
 
 enum iopcode {
     iop_assign, iop_add, iop_sub, iop_mul, iop_div, iop_mod, iop_uminus, iop_AND, iop_OR, iop_NOT, if_eq, 
-    if_noteq, if_lesseq, if_geatereq, if_less, if_greater, jump, call, param, ret, getretval, funcstart, funcend, 
+    if_noteq, if_lesseq, if_greatereq, if_less, if_greater, jump, call, param, ret, getretval, funcstart, funcend, 
     tablecreate, tablegetelem, tablesetelem
 };
 
@@ -15,13 +15,37 @@ enum expr_t {
     constnum_e, constbool_e, conststring_e, nil_e
 };
 
+typedef struct loopStack loopStack;
+typedef struct logicList logicList;
+
+struct logicList {
+	int quadNum;
+	logicList* next;
+};
+
+struct loopStack {
+	logicList* breaklist;
+	logicList* continuelist;
+	loopStack* next;
+};
+
+struct forLoopStruct {
+	int condition;
+	int enter;
+};
+
 typedef struct expr_ {
     enum expr_t type;
     symbol* sym;
     struct expr_* index;
+    struct expr_* indexedVal;
     double numConst;
     char* strConst;
     unsigned char boolConst;
+
+    logicList* truelist;
+	logicList* falselist;
+
     struct expr_* next;
 } expr, *expr_P;
 
@@ -34,50 +58,19 @@ typedef struct quad_ {
     unsigned line;
 } quad, *quad_T;
 
-typedef struct QuadNode_ {
-    int quadLabel;
-    struct QuadNode_ *next, *prev;
-} QuadNode, *QuadNode_T;
 
-extern QuadNode_T BreakStack, BreakCounterStack, JumpStackTop, QueueHead, ContinueStack, ContinueCounterStack;
 
-void emit_rel_op(enum iopcode op, expr* result, expr* arg1, expr* arg2, unsigned line);
+void emit(enum iopcode op, expr* result, expr* arg1, expr* arg2, unsigned int label, unsigned int line);
 
-void emit(enum iopcode op, expr* result, expr* arg1, expr* arg2, unsigned line);
+int nextQuadLabel();
 
-void mark_quad();
+logicList* makelist(int quadno);
 
-void mark_next_quad();
+logicList* mergeLocicLists(logicList* list1, logicList* list2);
 
-void mark_queue_quad();
+void backPatchList(logicList* list, int quadno);
 
-void mark_break_quad();
-
-void push_break_count(int breakNum);
-
-int pop_break_count(void);
-
-void patchBreakLabel();
-
-void mark_continue_quad();
-
-void push_continue_count(int breakNum);
-
-int pop_continue_count(void);
-
-void patchContinueLabel(int ExprStartQuad);
-
-int patchArg2Label();
-
-void patchELSEjump(int quadNum);
-
-void patchEmittedResult();
-
-int patch_loop_label();
-
-int patch_thisResult_FromStack();
-
-void patchLabel();
+void patchLabel(unsigned int quadnumber, unsigned int label);
 
 expr_P newExpr(enum expr_t type, symbol* sym);
 
@@ -86,13 +79,5 @@ symbol* newTemp(int *offset, enum scopespace_t space);
 void resetTemp();
 
 void writeQuadsToFile();
-
-QuadNode_T QuadNode_Stack_push(QuadNode_T StackHead, int label);
-
-QuadNode_T QuadNode_Stack_pop(QuadNode_T StackHead, int *res);
-
-QuadNode_T QuadNode_Queue_push(QuadNode_T head, int label);
-
-QuadNode_T QuadNode_Queue_pop(QuadNode_T head, int *res);
 
 #endif

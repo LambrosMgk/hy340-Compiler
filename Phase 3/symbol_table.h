@@ -39,7 +39,7 @@ symbol_T search_from_scope_out(char *name, int scope);
 
 symbol_T addSymbol(char * varName, enum SymbolCategory category, int scope, int line, int offset, enum scopespace_t space);
 
-symbol_T add_anonymus_func(int scope, int line);
+symbol_T add_anonymus_func(int scope, int line, int offset, enum scopespace_t space);
 
 void print_symbol_table();
 

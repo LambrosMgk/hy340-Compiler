@@ -1,8 +1,7 @@
 %{
     #include "symbol_table.h"
-    #include "stack.h"
     #include "quads.h"
-    #include "offset_stack.h"
+    #include "stack.h"
 
     int alpha_yylex(void);
     int alpha_yyerror(char *yaccProvidedMessage);
@@ -13,7 +12,17 @@
 
     int scope = 0, offset = 0;
     int allowReturn = 0;
-    enum scopespace_t curr_space = programmVar;
+    int breakExists = 0, ContinueExists = 0;
+
+     enum scopespace_t getSpace()
+    {
+        stack_T tmp = pop_func();
+        if(tmp == NULL) /*no function symbols in the stack means we are not in a function definition*/
+            return programmVar;
+        /*else*/
+        push_func(tmp->name, tmp->scope, tmp->startLabel);
+        return functionLocal;
+    }
 
     void  printMessage(char *msg)
     {
@@ -57,6 +66,8 @@
     double doubleval;
     struct symbol_ *symPtr;
     struct expr_ *exprPtr;
+    struct loopStack *loopStackStruct;
+    struct forLoopStruct* forLoopStruct;
 }
 
 
@@ -67,10 +78,12 @@
 %token<strVal> Lparenthesis Rparenthesis LCurlyBracket RCurlyBracket LSquareBracket RSquareBracket Semicolon comma colon coloncolon dot dotdot
 
 %type<exprPtr> lvalue primary term expr const elist objectdef assignexpr member funcdef
-%type<exprPtr> call callsuffix normcall methodcall
-%type<strVal> indexed indexedelem block idlist whilestmt forstmt returnstmt
-%type<intVal> stmt ifstmt
+%type<exprPtr> call callsuffix normcall methodcall stmt indexed indexedelem
+%type<strVal>  block idlist whilestmt forstmt returnstmt
+%type<intVal> M N ifstmt ifstmtprefix elseprefix whilestart whilecond
 
+%type<loopStackStruct> loopstmt
+%type<forLoopStruct> forprefix
 
 %right assign
 %left OR
@@ -89,40 +102,67 @@
 
 
 
-program:    stmts{ printMessage("program -> stmts\n"ANSI_COLOR_GREEN"Accepted!"ANSI_COLOR_RESET); print_symbol_table();}
+program:    stmts{ printMessage("program -> stmts\n"ANSI_COLOR_GREEN"Accepted!"ANSI_COLOR_RESET); writeQuadsToFile(); print_symbol_table();}
     ;
 
-stmts:  stmts stmt { printMessage("stmts -> statement kleene star");}
+stmts:  stmts stmt { printMessage("stmts -> statement kleene star"); resetTemp();}
         | 
     ;
 
-stmt:   expr Semicolon { printMessage("stmt -> exp;");} |
+stmt:   expr Semicolon { 
+            $$ = $1;
+
+            if($1->type == boolexpr_e)  // maybe add a check if it came from NOT
+            {
+                expr_P trueExpr = newExpr(constbool_e, NULL);
+                trueExpr->boolConst = 1;
+                expr_P falseExpr = newExpr(constbool_e, NULL);
+                falseExpr->boolConst = 0;
+                $1->sym = newTemp(&offset, getSpace());
+                expr_P numExpr = newExpr(constnum_e, NULL);
+                
+
+                backPatchList($1->truelist,nextQuadLabel());
+                emit(iop_assign, $1, trueExpr, NULL, nextQuadLabel(), alpha_yylineno);
+                numExpr->numConst = nextQuadLabel()+2;
+                emit(jump, NULL, NULL, numExpr, nextQuadLabel(), alpha_yylineno);
+                backPatchList($1->falselist, nextQuadLabel());
+                emit(iop_assign, $1, falseExpr, NULL, nextQuadLabel(), alpha_yylineno);
+            } 
+            printMessage("stmt -> exp;");
+        } |
         ifstmt { printMessage("stmt -> if statement");} |
         whilestmt { printMessage("stmt -> while statement");} |
         forstmt { printMessage("stmt -> for statement");}  |
         returnstmt { printMessage("stmt -> return statement");} |
         BREAK Semicolon { 
-            stack_T elem = pop_loop();
-            if(elem == NULL)
+
+            if(isLoopStackEmpty() == 1)
             {
                 printf(ANSI_COLOR_RED"Syntax error in line <%d>: break usage is not allowed outside of a loop"ANSI_COLOR_RESET"\n", alpha_yylineno);
-                exit(-1);
+                exit(-1); 
             }
-            push_loop(elem->name, elem->scope);
-            mark_break_quad();
-            emit(jump, NULL, NULL, NULL, alpha_yylineno);
+            else
+            {
+                breakPush(nextQuadLabel()); //put break label to the currect loop break list
+                emit(jump, NULL, NULL, NULL, nextQuadLabel(), alpha_yylineno);
+            }
+
             printMessage("stmt -> break; statement");
         } |
         CONTINUE Semicolon { 
-            stack_T elem = pop_loop();
-            if(elem == NULL)
+
+            if(isLoopStackEmpty() == 1)
             {
                 printf(ANSI_COLOR_RED"Syntax error in line <%d>: continue usage is not allowed outside of a loop"ANSI_COLOR_RESET"\n", alpha_yylineno);
-                exit(-1);
+                exit(-1); 
             }
-            push_loop(elem->name, elem->scope);
-            mark_continue_quad();
-            emit(jump, NULL, NULL, NULL, alpha_yylineno);
+            else
+            {
+                contPush(nextQuadLabel()); //put continue label to the currect loop break list
+                emit(jump, NULL, NULL, NULL, nextQuadLabel(), alpha_yylineno);
+            }
+            
             printMessage("stmt -> continue; statement");
         } |
         block { printMessage("stmt -> block statement");} |
@@ -130,18 +170,18 @@ stmt:   expr Semicolon { printMessage("stmt -> exp;");} |
         Semicolon { printMessage("stmt -> Semicolon statement");}
     ;
 
-expr:   assignexpr { printMessage("expr -> assignexpr"); } |
+expr:   assignexpr { $$ = $1; printMessage("expr -> assignexpr"); } |
         expr plus expr {
             expr_P result = $1; 
             if(result->type == arithexpr_e && result->sym->varName[0] == '_')   /*optimized code, use the same temp var to store the result*/
             {
-                emit(iop_add, result, $1, $3, alpha_yylineno);
+                emit(iop_add, result, $1, $3, nextQuadLabel(), alpha_yylineno);
             }
             else
             {
                 symbol_T temp = newTemp(&offset, getSpace());   /*gave pointer to offset because i don't know if i'll get a new var or not*/
                 result = newExpr(arithexpr_e, temp);
-                emit(iop_add, result, $1, $3, alpha_yylineno);
+                emit(iop_add, result, $1, $3, nextQuadLabel(), alpha_yylineno);
             }
             
             $$ = result;
@@ -151,13 +191,13 @@ expr:   assignexpr { printMessage("expr -> assignexpr"); } |
             expr_P result = $1; 
             if(result->type == arithexpr_e && result->sym->varName[0] == '_')   /*optimized code*/
             {
-                emit(iop_sub, result, $1, $3, alpha_yylineno);
+                emit(iop_sub, result, $1, $3, nextQuadLabel(), alpha_yylineno);
             }
             else
             {
                 symbol_T temp = newTemp(&offset, getSpace());
                 result = newExpr(arithexpr_e, temp);
-                emit(iop_sub, result, $1, $3, alpha_yylineno);
+                emit(iop_sub, result, $1, $3, nextQuadLabel(), alpha_yylineno);
             }
             
             $$ = result;
@@ -167,118 +207,258 @@ expr:   assignexpr { printMessage("expr -> assignexpr"); } |
             symbol_T temp = newTemp(&offset, getSpace());
             expr_P result = newExpr(arithexpr_e, temp);
             $$ = result;
-            emit(iop_mul, result, $1, $3, alpha_yylineno); printMessage("expr -> expr * expr");
+            emit(iop_mul, result, $1, $3, nextQuadLabel(), alpha_yylineno); printMessage("expr -> expr * expr");
         } |
         expr divide expr {
             symbol_T temp = newTemp(&offset, getSpace());
             expr_P result = newExpr(arithexpr_e, temp);
             $$ = result;
-            emit(iop_div, result, $1, $3, alpha_yylineno); printMessage("expr -> expr / expr");
+            emit(iop_div, result, $1, $3, nextQuadLabel(), alpha_yylineno); printMessage("expr -> expr / expr");
         } |
         expr mod expr {
             symbol_T temp = newTemp(&offset, getSpace());
             expr_P result = newExpr(arithexpr_e, temp);
             $$ = result;
-            emit(iop_mod, result, $1, $3, alpha_yylineno); printMessage("expr -> expr % expr");
+            emit(iop_mod, result, $1, $3, nextQuadLabel(), alpha_yylineno); printMessage("expr -> expr % expr");
         } |
         expr greater expr {
-            symbol_T temp = newTemp(&offset, getSpace());
-            expr_P result = newExpr(var_e, temp);
-            
-            emit_rel_op(if_greater, result, $1, $3, alpha_yylineno); printMessage("expr -> expr > expr");
-            $$ = result;
+            $$ = newExpr(boolexpr_e, NULL);
+            $$->truelist = makelist(nextQuadLabel());
+            $$->falselist = makelist(nextQuadLabel()+1);
+            emit(if_greater, $1, $3, NULL, nextQuadLabel(), alpha_yylineno);
+            emit(jump, NULL, NULL, NULL, nextQuadLabel(), alpha_yylineno);
+            printMessage("expr -> expr > expr");
         } |
         expr ge expr {
-            symbol_T temp = newTemp(&offset, getSpace());
-            expr_P result = newExpr(var_e, temp);
-
-            emit_rel_op(if_geatereq, result, $1, $3, alpha_yylineno); printMessage("expr -> expr >= expr");
-            $$ = result;
+            $$ = newExpr(boolexpr_e, NULL);
+            $$->truelist = makelist(nextQuadLabel());
+            $$->falselist = makelist(nextQuadLabel()+1);
+            emit(if_greatereq, $1, $3, NULL, nextQuadLabel(), alpha_yylineno);
+            emit(jump, NULL, NULL, NULL, nextQuadLabel(), alpha_yylineno);
+            printMessage("expr -> expr >= expr");
         } |
         expr less expr {
-            symbol_T temp = newTemp(&offset, getSpace());
-            expr_P result = newExpr(var_e, temp);
-            $$ = result;
-            emit_rel_op(if_less, result, $1, $3, alpha_yylineno); printMessage("expr -> expr < expr");
+            $$ = newExpr(boolexpr_e, NULL);
+            $$->truelist = makelist(nextQuadLabel());
+            $$->falselist = makelist(nextQuadLabel()+1);
+            emit(if_less, $1, $3, NULL, nextQuadLabel(), alpha_yylineno);
+            emit(jump, NULL, NULL, NULL, nextQuadLabel(), alpha_yylineno);
+            printMessage("expr -> expr < expr");
         } |
         expr le expr {
-            symbol_T temp = newTemp(&offset, getSpace());
-            expr_P result = newExpr(var_e, temp);
-            $$ = result;
-            emit_rel_op(if_lesseq, result, $1, $3, alpha_yylineno); printMessage("expr -> expr <= expr");
+            $$ = newExpr(boolexpr_e, NULL);
+            $$->truelist = makelist(nextQuadLabel());
+            $$->falselist = makelist(nextQuadLabel()+1);
+            emit(if_lesseq, $1, $3, NULL, nextQuadLabel(), alpha_yylineno);
+            emit(jump, NULL, NULL, NULL, nextQuadLabel(), alpha_yylineno);
+            printMessage("expr -> expr <= expr");
         } |
-        expr equal expr {
-            symbol_T temp = newTemp(&offset, getSpace());
-            expr_P result = newExpr(var_e, temp);
-            $$ = result;
-            emit_rel_op(if_eq, result, $1, $3, alpha_yylineno); printMessage("expr -> expr == expr");
+        expr equal {
+
+            if($1->type == boolexpr_e)
+            {
+                expr_P trueExpr = newExpr(constbool_e, NULL);
+                trueExpr->boolConst = 1;
+                expr_P falseExpr = newExpr(constbool_e, NULL);
+                falseExpr->boolConst = 0;
+                expr_P numExpr = newExpr(constnum_e, NULL);
+                $1->sym = newTemp(&offset, getSpace());
+
+                backPatchList($1->truelist, nextQuadLabel());
+                emit(iop_assign, $1, trueExpr, NULL, nextQuadLabel(), alpha_yylineno);
+                numExpr->numConst = nextQuadLabel()+2;
+                emit(jump, NULL, NULL, numExpr, nextQuadLabel(), alpha_yylineno);
+                backPatchList($1->falselist, nextQuadLabel());
+                emit(iop_assign, $1, falseExpr,NULL, nextQuadLabel(), alpha_yylineno);
+            }
+        } expr {
+
+            if($4->type == boolexpr_e)
+            {
+                expr_P trueExpr = newExpr(constbool_e, NULL);
+                trueExpr->boolConst = 1;
+                expr_P falseExpr = newExpr(constbool_e, NULL);
+                falseExpr->boolConst = 0;
+                expr_P numExpr = newExpr(constnum_e, NULL);
+
+                $4->sym = newTemp(&offset, getSpace());
+                backPatchList($4->truelist, nextQuadLabel());
+                emit(iop_assign, $4, trueExpr, NULL, nextQuadLabel(), alpha_yylineno);
+                numExpr->numConst = nextQuadLabel()+2;
+                emit(jump, NULL, NULL, numExpr, nextQuadLabel(), alpha_yylineno);
+                backPatchList($4->falselist,nextQuadLabel());
+                emit(iop_assign, $4, falseExpr, NULL, nextQuadLabel(), alpha_yylineno);
+            }
+
+            $$ = newExpr(boolexpr_e, NULL);
+            $$->truelist = makelist(nextQuadLabel());
+            $$->falselist = makelist(nextQuadLabel()+1);
+            emit(if_eq, $1, $4, NULL, nextQuadLabel(), alpha_yylineno);
+            emit(jump, NULL, NULL, NULL, nextQuadLabel(), alpha_yylineno);
+            printMessage("expr -> expr == expr");
         } |
-        expr neq expr {
-            symbol_T temp = newTemp(&offset, getSpace());
-            expr_P result = newExpr(var_e, temp);
-            $$ = result;
-            emit_rel_op(if_noteq, result, $1, $3, alpha_yylineno); printMessage("expr -> expr != expr");
+        expr neq {
+
+            if($1->type == boolexpr_e)
+            {
+                expr_P trueExpr = newExpr(constbool_e, NULL);
+                trueExpr->boolConst = 1;
+                expr_P falseExpr = newExpr(constbool_e, NULL);
+                falseExpr->boolConst = 0;
+                expr_P numExpr = newExpr(constnum_e, NULL);
+                $1->sym = newTemp(&offset, getSpace());
+
+                backPatchList($1->truelist, nextQuadLabel());
+                emit(iop_assign, $1, trueExpr, NULL, nextQuadLabel(), alpha_yylineno);
+                numExpr->numConst = nextQuadLabel()+2;
+                emit(jump, NULL, NULL, numExpr, nextQuadLabel(), alpha_yylineno);
+                backPatchList($1->falselist, nextQuadLabel());
+                emit(iop_assign, $1, falseExpr, NULL, nextQuadLabel(), alpha_yylineno);
+            }
+
+        } expr {
+
+            if($4->type == boolexpr_e)
+            {
+                expr_P trueExpr = newExpr(constbool_e, NULL);
+                trueExpr->boolConst = 1;
+                expr_P falseExpr = newExpr(constbool_e, NULL);
+                falseExpr->boolConst = 0;
+                expr_P numExpr = newExpr(constnum_e, NULL);
+
+                $4->sym = newTemp(&offset, getSpace());
+
+                backPatchList($4->truelist, nextQuadLabel());
+                emit(iop_assign, $4, trueExpr, NULL, nextQuadLabel(), alpha_yylineno);
+                numExpr->numConst = nextQuadLabel()+2;
+                emit(jump, NULL, NULL, numExpr, nextQuadLabel(), alpha_yylineno);
+                backPatchList($4->falselist, nextQuadLabel());
+                emit(iop_assign, $4, falseExpr, NULL, nextQuadLabel(), alpha_yylineno);
+            }
+
+            $$ = newExpr(boolexpr_e, NULL);
+            $$->truelist = makelist(nextQuadLabel());
+            $$->falselist = makelist(nextQuadLabel()+1);
+            emit(if_noteq, $1, $4, NULL, nextQuadLabel(), alpha_yylineno);
+            emit(jump, NULL, NULL, NULL, nextQuadLabel(), alpha_yylineno);
+
+            printMessage("expr -> expr != expr");
         } |
+
         expr AND {
-                expr_P expr = newExpr(constbool_e, NULL);
-                expr->boolConst = 0;
-                mark_quad();
-                emit(if_eq, $1, expr, NULL, alpha_yylineno); 
-        } expr {
-                expr_P result = $4;
-                expr_P expr = newExpr(constbool_e, NULL);
-                expr->boolConst = 0;
+            if($1->type != boolexpr_e)
+            {
+                expr_P bool_expr = newExpr(boolexpr_e, NULL);
+                bool_expr->boolConst = 1;
+                $1->truelist = makelist(nextQuadLabel());
+                $1->falselist = makelist(nextQuadLabel()+1);
+                emit(if_eq, bool_expr, $1, NULL, nextQuadLabel(), alpha_yylineno);
+                emit(jump, NULL, NULL, NULL, nextQuadLabel(), alpha_yylineno);
 
-                emit(jump, NULL, NULL, NULL, alpha_yylineno);
-                patchEmittedResult();
-                patchArg2Label();
-                emit(iop_assign, result, expr, NULL, alpha_yylineno);
+                backPatchList($1->truelist, nextQuadLabel());
+	        }
+        }
+        
+        M expr  {
 
-                $$ = result;
-                printMessage("expr -> expr AND expr");
-        } |
-        expr OR {
-                expr_P expr = newExpr(constbool_e, NULL);
-                expr->boolConst = 0;
-                mark_quad();
-                emit(if_noteq, $1, expr, NULL, alpha_yylineno);
-        } expr {
-                expr_P result = $4;
-                expr_P expr = newExpr(constbool_e, NULL);
-                expr->boolConst = 1;
+        $$ = newExpr(boolexpr_e, NULL);
 
-                emit(jump, NULL, NULL, NULL, alpha_yylineno);
-                patchEmittedResult();
-                patchArg2Label();
-                emit(iop_assign, result, expr, NULL, alpha_yylineno);
-                
-                $$ = result;
-                printMessage("expr -> expr OR expr");
-        } |
+        //typecheck for arguments that are not boolean and create logic lists for them
+        if($5->type != boolexpr_e)
+        {
+            expr_P bool_expr = newExpr(constbool_e, NULL);
+            bool_expr->boolConst = 1;
+            $5->truelist = makelist(nextQuadLabel());
+            $5->falselist = makelist(nextQuadLabel()+1);
+            emit(if_eq, bool_expr, $5, NULL, nextQuadLabel(), alpha_yylineno);
+            emit(jump, NULL, NULL, NULL, nextQuadLabel(), alpha_yylineno);
+        }
+        
+        if($1->type == boolexpr_e)
+        {
+            backPatchList($1->truelist, $4);
+            printf(ANSI_COLOR_GREEN"Backpatching to %d"ANSI_COLOR_RESET"\n", $4);
+        }
+
+        $$->truelist = $5->truelist;
+        $$->falselist = mergeLocicLists($1->falselist,$5->falselist);
+        printMessage("expr -> expr AND expr");
+    } |
+
+    expr OR { 
+            if($1->type != boolexpr_e)
+            {
+                expr_P bool_expr = newExpr(boolexpr_e, NULL);
+                bool_expr->boolConst = 1;
+                $1->truelist = makelist(nextQuadLabel());
+                $1->falselist = makelist(nextQuadLabel()+1);
+                emit(if_eq, bool_expr, $1, NULL, nextQuadLabel(), alpha_yylineno);
+                emit(jump, NULL, NULL, NULL, nextQuadLabel(), alpha_yylineno);
+
+                backPatchList($1->falselist, nextQuadLabel());
+	        }
+        } 
+    M expr    {   
+
+        $$ = newExpr(boolexpr_e, NULL);
+
+        //typecheck for arguments that are not boolean and create logic lists for them
+        if($5->type != boolexpr_e){
+            expr_P bool_expr = newExpr(boolexpr_e, NULL);
+            bool_expr->boolConst = 1;
+            $5->truelist   = makelist(nextQuadLabel());
+            $5->falselist  = makelist(nextQuadLabel()+1);
+            emit(if_eq, bool_expr, $5, NULL, nextQuadLabel(), alpha_yylineno);
+            emit(jump, NULL, NULL, NULL, nextQuadLabel(), alpha_yylineno);
+        }
+
+        if($1->type == boolexpr_e)
+        {
+            backPatchList($1->falselist,$4);
+        }
+
+        $$->truelist = mergeLocicLists($1->truelist,$5->truelist);
+        $$->falselist = $5->falselist;
+        printMessage("expr -> expr OR expr");
+
+    } |
         term { $$ = $1; printMessage("expr -> term"); }
     ;
+
+M:  { $$ = nextQuadLabel(); }
 
 
 term:   Lparenthesis expr Rparenthesis {  
             $$ = $2;
             printMessage("term -> (expr)"); 
         } |
-        uminus expr { 
+        minus expr %prec uminus {   /*%prec uminus gia na deixw oti exei idia proteraiothta me to dhlwmeno uminus*/
             expr_P exprPtr = $2;
             
             check_for_func_error(exprPtr->sym);
-            emit(iop_uminus, exprPtr, NULL, NULL, alpha_yylineno);
+            emit(iop_uminus, exprPtr, NULL, NULL, nextQuadLabel(), alpha_yylineno);
             $$ = exprPtr;
             printMessage("term -> uminus expr");
         } |
         NOT expr    {
-            expr_P exprPtr = $2;
-            symbol_T temp = newTemp(&offset, getSpace());
-            expr_P result = newExpr(var_e, temp);
-            $$ = result;
+            $$ = newExpr(boolexpr_e, NULL);
+            $$->sym = $2->sym;
 
-            check_for_func_error(exprPtr->sym);
-            emit(iop_NOT, result, $2, NULL, alpha_yylineno);    /*or i could use a function like emit_rel_op() and use if_eq and jumps*/
+            if($2->type != boolexpr_e)
+            {
+                expr_P trueExpr = newExpr(constbool_e, NULL);
+                trueExpr->boolConst = 1;
+                $$->truelist = makelist(nextQuadLabel()+1);
+                $$->falselist = makelist(nextQuadLabel());
+                emit(if_eq, trueExpr, $2, NULL, nextQuadLabel(), alpha_yylineno);
+                emit(jump, NULL, NULL, NULL, nextQuadLabel(), alpha_yylineno);
+            }
+            else
+            {
+                $$->truelist = $2->falselist;
+                $$->falselist = $2->truelist;
+            }
+
             printMessage("term -> not expr");
         } |
         plusplus lvalue { 
@@ -287,7 +467,7 @@ term:   Lparenthesis expr Rparenthesis {
             numExpr->numConst = 1;
 
             check_for_func_error(exprPtr->sym);
-            emit(iop_add, exprPtr, exprPtr, numExpr, alpha_yylineno);   /*pre increment*/
+            emit(iop_add, exprPtr, exprPtr, numExpr, nextQuadLabel(), alpha_yylineno);   /*pre increment*/
             printMessage("term -> ++lvalue");
         } |
         lvalue plusplus { 
@@ -298,8 +478,8 @@ term:   Lparenthesis expr Rparenthesis {
             $$ = result;
 
             check_for_func_error(exprPtr->sym); 
-            emit(iop_assign, result, exprPtr, NULL, alpha_yylineno);    /*assign old value to a temp, post increment*/
-            emit(iop_add, exprPtr, exprPtr, numExpr, alpha_yylineno);
+            emit(iop_assign, result, exprPtr, NULL, nextQuadLabel(), alpha_yylineno);    /*assign old value to a temp, post increment*/
+            emit(iop_add, exprPtr, exprPtr, numExpr, nextQuadLabel(), alpha_yylineno);
             printMessage("term -> lvalue++");
         } |
         minusminus lvalue   { 
@@ -308,7 +488,7 @@ term:   Lparenthesis expr Rparenthesis {
             numExpr->numConst = 1;
 
             check_for_func_error(exprPtr->sym);
-            emit(iop_sub, exprPtr, exprPtr, numExpr, alpha_yylineno);   /*pre decrement*/
+            emit(iop_sub, exprPtr, exprPtr, numExpr, nextQuadLabel(), alpha_yylineno);   /*pre decrement*/
             printMessage("term -> --lvalue");
         } |
         lvalue minusminus   { 
@@ -319,110 +499,62 @@ term:   Lparenthesis expr Rparenthesis {
             $$ = result;
 
             check_for_func_error(exprPtr->sym);
-            emit(iop_assign, result, exprPtr, NULL, alpha_yylineno);    /*assign old value to a temp, post decrement*/
-            emit(iop_sub, exprPtr, exprPtr, numExpr, alpha_yylineno);
+            emit(iop_assign, result, exprPtr, NULL, nextQuadLabel(), alpha_yylineno);    /*assign old value to a temp, post decrement*/
+            emit(iop_sub, exprPtr, exprPtr, numExpr, nextQuadLabel(), alpha_yylineno);
             printMessage("term -> lvalue--");
         } |
-        primary { printMessage("term -> primary");}
+        primary { $$ = $1; printMessage("term -> primary");}
     ;
 
 assignexpr:     lvalue assign expr  {
-            symbol_T lval = $1;
-            
-            check_for_func_error(lval);
 
-            
-            printMessage("assignexpr -> lvalue = expr");
-        }
-    ;
-assignexpr:     lvalue assign expr  {
-            expr_P exprPtr = $1, tmp = NULL, result = NULL, prev_result = NULL, final_result = NULL;
-            symbol_T temp = NULL;
-            
-            check_for_func_error(exprPtr->sym);
-            $$ = $3;
-            if($3->index != NULL) /*only table items have index != null (another way to know when expr is a tableitem while also being constbool_e or something)*/
-            {
-                tmp = $3->index;
-                temp = newTemp(&offset, getSpace());
-                result = newExpr(tableitem_e, temp);
-                emit(tablegetelem, tmp, tmp->next, result, alpha_yylineno); /* TABLEGETELEM t "a" _t1*/
+            expr_P trueExpr = newExpr(constbool_e, NULL);
+            trueExpr->boolConst = 1;
+            expr_P falseExpr = newExpr(constbool_e, NULL);
+            falseExpr->boolConst = 0;
 
-                tmp = tmp->next->next;
-                prev_result = result;
-                while(tmp != NULL)
-                {
-                    temp = newTemp(&offset, getSpace());
-                    result = newExpr(tableitem_e, temp);
-                    emit(tablegetelem, prev_result, tmp, result, alpha_yylineno);
-                    prev_result = result;
-                    tmp = tmp->next;
-                }
-                final_result = prev_result;
-            }
-            if($1->type == tableitem_e) /*if lvalue is table item then get the first item and at the end to tablesetelem*/
-            {
-                tmp = $1->index;    /*all index pointers point to the first item*/
-                if(tmp != NULL)     /*just to be sure*/
-                {
-                    temp = newTemp(&offset, getSpace());
-                    result = newExpr(tableitem_e, temp);
-                    if(tmp->next->next != NULL)
-                    {
-                        emit(tablegetelem, tmp, tmp->next, result, alpha_yylineno); /* TABLEGETELEM t "a" _t1*/
-                        tmp = tmp->next->next;  /*if t.a.b we go to 'b'*/
-                        prev_result = result;
-                    }   
-                    else
-                    {
-                        prev_result = tmp;
-                        tmp = tmp->next;
-                    }
+            check_for_func_error($1->sym);
 
-                    
-                    while(tmp->next != NULL)
-                    {
-                        temp = newTemp(&offset, getSpace());
-                        result = newExpr(tableitem_e, temp);
-                        emit(tablegetelem, prev_result, tmp, result, alpha_yylineno);
-                        prev_result = result;
-                        tmp = tmp->next;
-                    }
-                    if(final_result != NULL)    /*then expr is a table item*/
-                        emit(tablesetelem, prev_result, tmp, final_result, alpha_yylineno);   /*TABLESETELEM _t1 "b" x*/
-                    else    /*its was something else*/
-                        emit(tablesetelem, prev_result, tmp, $3, alpha_yylineno);
-                }
-                else
-                {
-                    printf("Error: tmp shouldn't be null, that means we have lvalue = table.nothing\n");
-                }
-            }
-            else
+            if($3->type == boolexpr_e)
             {
-                if(final_result != NULL)    /*if R-value was tableitem then we need to assign the value from the temporary var inside final_result*/
-                    emit(iop_assign, $1, final_result, NULL, alpha_yylineno);
-                else    /*classic emit*/
-                    emit(iop_assign, $1, $3, NULL, alpha_yylineno);
-            }
-
-            /*type checking??*/
-            if($3->type == newtable_e || $3->type == tableitem_e)/*maybe check the type of R-value to determine the type of L-value*/
-            {
-                /*$1->type = newtable_e;?????????*/ /*no because that's how i check objectdef and elsewhere*/ /*athlough that may not matter cuz lvalue -> id assigns the type var_e*/
-                printf("lvalue is now table??\n");
-            }
-            /*type checking??*/
-            /*if($3->type == constnum_e)
-                printf("%s is type of constnum_e\n", $1->sym->varName);
-            else if($3->type == constbool_e)
-                printf("%s is type of constbool_e\n", $1->sym->varName);
-            else if($3->type == conststring_e)
-                printf("%s is type of conststring_e\n", $1->sym->varName);
-            else
-                printf("is some other type\n");*/
-            
+                expr_P numExpr = newExpr(constnum_e, NULL);
                 
+                $3->sym = newTemp(&offset, getSpace());
+                
+                backPatchList($3->truelist, nextQuadLabel());
+                emit(iop_assign, $3, trueExpr, NULL, nextQuadLabel(), alpha_yylineno);
+
+                numExpr->numConst = nextQuadLabel()+2;
+                emit(jump, NULL, NULL, numExpr, nextQuadLabel(), alpha_yylineno);
+                backPatchList($3->falselist, nextQuadLabel());
+                emit(iop_assign, $3, falseExpr, NULL, nextQuadLabel(), alpha_yylineno);
+            }
+
+            if($1->type == tableitem_e)
+            {
+                emit(tablesetelem, $1, $1->index, $3, nextQuadLabel(), alpha_yylineno);
+                expr* lvalue = $1;
+                if($1->type == tableitem_e)
+                {
+                    lvalue = newExpr(var_e, NULL);
+                    lvalue->sym = newTemp(&offset, getSpace());
+                    emit(tablegetelem, $1, $1->index, lvalue, nextQuadLabel(), alpha_yylineno);
+                }
+                $$ = lvalue;
+                $$->type = assignexpr_e;
+            }
+            else
+            {
+                //maybe create a new expr? $1 = newExpr(var_e, $1->sym);  
+                //l-value ($1) shouldn't be anything else that var_e (unless im forgetting something)
+                emit(iop_assign, $1, $3, NULL, nextQuadLabel(), alpha_yylineno);
+
+                $$ = newExpr(assignexpr_e, NULL);
+                $$->sym = newTemp(&offset, getSpace());
+                emit(iop_assign, $$, $1, NULL, nextQuadLabel(), alpha_yylineno);
+            }
+
+            
             printMessage("assignexpr -> lvalue = expr");}
     ;
 
@@ -448,7 +580,7 @@ lvalue:     ID  {
                         else
                             category = local_var;
 
-                        sym = addSymbol($1, category, scope, alpha_yylineno, offset, curr_space);
+                        sym = addSymbol($1, category, scope, alpha_yylineno, offset, getSpace());
                         offset++;
                         printf("Added symbol\n");
                     }
@@ -479,13 +611,13 @@ lvalue:     ID  {
                     } 
                     else if (scope == 0) /*if global ignore local*/
                     {
-                        sym = addSymbol($2, global_var, scope, alpha_yylineno, offset, curr_space);
+                        sym = addSymbol($2, global_var, scope, alpha_yylineno, offset, getSpace());
                         offset++;
                         printf("Added global %s (ignored local)\n", $2);
                     }
                     else
                     {
-                        sym = addSymbol($2, local_var, scope, alpha_yylineno, offset, curr_space);
+                        sym = addSymbol($2, local_var, scope, alpha_yylineno, offset, getSpace());
                         offset++;
                         printf("Added local %s\n", $2);
                     }
@@ -512,13 +644,56 @@ lvalue:     ID  {
     ;
 
 member:     lvalue dot ID   {
-                $$ = member_lvalue_dot_ID($1, $3);
+                expr* lvalue = $1;
+
+                if($1->type == tableitem_e)
+                {
+                    lvalue = newExpr(var_e, NULL);
+                    lvalue->sym = newTemp(&offset, getSpace());
+                    emit(tablegetelem, $1, $1->index, lvalue, nextQuadLabel(), alpha_yylineno);
+                }
+                
+                $$ = newExpr(tableitem_e, NULL);
+                $$->sym = lvalue->sym;
+                $$->index = newExpr(conststring_e, NULL);
+	            $$->index->strConst = strdup($3);
+
                 printMessage("member -> lvalue.ID"); 
-    }    |
+        }    |
             lvalue LSquareBracket expr RSquareBracket   {
-                $$ = member_lvalue_LSqBr_expr_RSqBr($1, $3, scope);
+                 if($3->type == boolexpr_e)
+                 {
+                    expr_P trueExpr = newExpr(constbool_e, NULL);
+                    trueExpr->boolConst = 1;
+                    expr_P falseExpr = newExpr(constbool_e, NULL);
+                    falseExpr->boolConst = 0;
+                    expr_P numExpr = newExpr(constnum_e, NULL);
+
+                    $3->sym = newTemp(&offset, getSpace());
+                    
+                    backPatchList($3->truelist, nextQuadLabel());
+                    emit(iop_assign, $3, trueExpr, NULL, nextQuadLabel(), alpha_yylineno);
+                    numExpr->numConst = nextQuadLabel()+2;
+                    emit(jump, NULL, NULL, numExpr, nextQuadLabel(), alpha_yylineno);
+                    backPatchList($3->falselist, nextQuadLabel());
+                    emit(iop_assign, $3, falseExpr, NULL, nextQuadLabel(), alpha_yylineno);
+                }
+
+                expr* lvalue = $1;
+
+                if($1->type == tableitem_e)
+                {
+                    lvalue = newExpr(var_e, NULL);
+                    lvalue->sym = newTemp(&offset, getSpace());
+                    emit(tablegetelem, $1, $1->index, lvalue, nextQuadLabel(), alpha_yylineno);
+                }
+
+                $$ = newExpr(tableitem_e, NULL);
+                $$->sym = lvalue->sym;
+                $$->index = $3;
+
                 printMessage("member -> lvalue[expr]"); 
-    }    |
+        }    |
             call dot ID { printMessage("member -> call.ID"); }  |
             call LSquareBracket expr RSquareBracket { printMessage("member -> call[expr]"); }
     ;
@@ -528,13 +703,13 @@ call:       call Lparenthesis elist Rparenthesis    { printMessage("call -> call
                 expr_P tmp = $2;    /*get callsuffix (only done normcall tho)*/
                 while(tmp != NULL)    /*go to the end of the list*/
                 {
-                    emit(param, tmp, NULL, NULL, alpha_yylineno);/*emit param for every struct in the elist list*/
+                    emit(param, tmp, NULL, NULL, nextQuadLabel(), alpha_yylineno);/*emit param for every struct in the elist list*/
                     tmp = tmp->next;
                 }
-                emit(call, $1, NULL, NULL, alpha_yylineno);
+                emit(call, $1, NULL, NULL, nextQuadLabel(), alpha_yylineno);
                 symbol_T temp = newTemp(&offset, getSpace());
                 expr_P result = newExpr(var_e, temp);
-                emit(getretval, result, NULL , NULL, alpha_yylineno);
+                emit(getretval, result, NULL, NULL, nextQuadLabel(), alpha_yylineno);
                 $$ = result;
                 printMessage("call -> lvalue callsuffix");
         }  |
@@ -553,7 +728,10 @@ normcall:   Lparenthesis elist Rparenthesis {
 methodcall: dotdot ID Lparenthesis elist Rparenthesis   { printMessage("..ID(elist)"); }
     ;
 
-elist: expr { $$ = $1; printMessage("elist -> expr"); }   |
+elist: expr { 
+        $$ = $1; 
+        printMessage("elist -> expr"); 
+    }   |
         elist comma expr    {
             expr_P tmp = $1;
             while(tmp->next != NULL)    /*go to the end of the list*/
@@ -565,7 +743,7 @@ elist: expr { $$ = $1; printMessage("elist -> expr"); }   |
             $$ = $1;    /*return the first element of the list*/
             printMessage("elist -> elist,expr"); 
     }    |
-        { $$ = NULL; printMessage("elist -> empty"); }
+        { $$ = newExpr(nil_e, NULL); printMessage("elist -> empty"); }
     ;
 
 objectdef:  LSquareBracket elist RSquareBracket {
@@ -573,28 +751,69 @@ objectdef:  LSquareBracket elist RSquareBracket {
             
             exprPtr = newExpr(newtable_e, NULL);
             exprPtr->sym = newTemp(&offset, getSpace());
-            emit(tablecreate, exprPtr, NULL, NULL, alpha_yylineno);
-            for (int i = 0; tmp; tmp = tmp->next)
+            emit(tablecreate, exprPtr, NULL, NULL, nextQuadLabel(), alpha_yylineno);
+            for (int i = 0; tmp != NULL; tmp = tmp->next)
             {
                 tableItemexpr = newExpr(constnum_e, NULL);
                 tableItemexpr->numConst = i++;
-                emit(tablesetelem, exprPtr, tableItemexpr, tmp, alpha_yylineno);
+                emit(tablesetelem, exprPtr, tableItemexpr, tmp, nextQuadLabel(), alpha_yylineno);
             }
             $$ = exprPtr;
             printMessage("objectdef -> [elist]");
     }   |
             LSquareBracket indexed RSquareBracket   {
-            expr_P exprPtr = newExpr(newtable_e, NULL);
+            expr_P exprPtr = NULL, tmp = $2;
+            
+            exprPtr = newExpr(newtable_e, NULL);
+            exprPtr->sym = newTemp(&offset, getSpace());
+            emit(tablecreate, exprPtr, NULL, NULL, nextQuadLabel(), alpha_yylineno);
+            for (int i = 0; tmp != NULL; tmp = tmp->next)
+            {
+                emit(tablesetelem, exprPtr, tmp->index, tmp->indexedVal, nextQuadLabel(), alpha_yylineno);
+            }
             $$ = exprPtr;
+            
             printMessage("objectdef -> [indexed]"); 
     }
     ;
 
-indexed:    indexedelem { printMessage("indexed -> indexedelem"); } |
-            indexed comma indexedelem   { printMessage("indexed -> indexed,indexedelem"); }
+indexed:    indexedelem { $$ = $1; printMessage("indexed -> indexedelem"); } |
+            indexed comma indexedelem { 
+                expr* tmp = $1;
+                while(tmp->next != NULL)
+                {
+                    tmp = tmp->next;
+                }
+                tmp->next = $3;
+                $$ = $1;
+                printMessage("indexed -> indexed, indexedelem");
+            }
     ;
 
-indexedelem:    LCurlyBracket expr colon expr RCurlyBracket { printMessage("indexedelem -> {expr:expr}"); }
+indexedelem:    LCurlyBracket expr colon expr RCurlyBracket { 
+                 if($4->type == boolexpr_e)
+                 {
+                    expr_P trueExpr = newExpr(constbool_e, NULL);
+                    trueExpr->boolConst = 1;
+                    expr_P falseExpr = newExpr(constbool_e, NULL);
+                    falseExpr->boolConst = 0;
+                    expr_P numExpr = newExpr(constnum_e, NULL);
+
+                    $4->sym = newTemp(&offset, getSpace());;
+                    
+                    backPatchList($4->truelist, nextQuadLabel());
+                    emit(iop_assign, $4, trueExpr, NULL, nextQuadLabel(), alpha_yylineno);
+                    numExpr->numConst = nextQuadLabel() + 2;
+                    emit(jump, NULL, NULL, numExpr, nextQuadLabel(), alpha_yylineno);
+                    backPatchList($4->falselist, nextQuadLabel());
+                    emit(iop_assign, $4, falseExpr, NULL, nextQuadLabel(), alpha_yylineno);
+                }
+
+                $$ = newExpr(tableitem_e, NULL);
+                $$->index = $2;
+                $$->indexedVal = $4;
+
+                printMessage("indexedelem -> {expr:expr}"); }
     ;
 
 block: LCurlyBracket {scope++; printf("block scope %d\n", scope);} stmts RCurlyBracket { hide_in_scope(scope); scope--; printMessage("block -> {stmts}"); } 
@@ -607,63 +826,57 @@ funcdef:    FUNCTION ID {
                     printf(ANSI_COLOR_RED"Syntax error in line <%d>: redeclaration of %s as function"ANSI_COLOR_RESET"\n", alpha_yylineno, $2);
                     exit(-1);
                 }
-                addSymbol($2, user_func, scope, alpha_yylineno, offset, curr_space); 
+                addSymbol($2, user_func, scope, alpha_yylineno, offset, getSpace()); 
 
-                
+                push_func($2, scope, nextQuadLabel());
                 offset++;   /*functions count as variables?*/
                 offset_push(offset);
                 expr_P expr = newExpr(programfunc_e, sym);
-                mark_quad();
-                emit(jump, NULL, NULL, NULL, alpha_yylineno); /*create empty jump that will later be filled with the end of this function*/
-                emit(funcstart, expr, NULL, NULL, alpha_yylineno);
+                emit(jump, NULL, NULL, NULL, nextQuadLabel(), alpha_yylineno); /*create empty jump that will later be filled with the end of this function*/
+                emit(funcstart, expr, NULL, NULL, nextQuadLabel(), alpha_yylineno);
 
                 printf("OFFSET BEFORE FUNC %d\n", offset);
                 offset = 0;
             } 
             Lparenthesis idlist {
-                curr_space = functionLocal;
                 printf(ANSI_COLOR_GREEN"formal args counter : %d"ANSI_COLOR_RESET"\n", offset);
             }
-            Rparenthesis {allowReturn++;} 
+            Rparenthesis {allowReturn++;}
             block  {
                 symbol_T sym = getElement($2, scope);
                 expr_P expr = newExpr(programfunc_e, sym);
 
-                emit(funcend, expr, NULL, NULL, alpha_yylineno);
-                patchLabel();
+                stack_T funcStruct = pop_func();
+                emit(funcend, expr, NULL, NULL, nextQuadLabel(), alpha_yylineno);
+                patchLabel(funcStruct->startLabel, nextQuadLabel()-1);
                 allowReturn--;
-                
                 offset_stack_T offsettmp = offset_pop();
-                offset = offsettmp->offset; printf("OFFSET AFTER FUNC %d\n", offset);
+                offset = offsettmp->offset; printf("OFFSET AFTER FUNC %d\n", offset);   //remove this later
                 printMessage("funcdef -> function id(idlist){stmts}");
             }   |
-            FUNCTION {add_anonymus_func(scope, alpha_yylineno);} Lparenthesis idlist Rparenthesis {allowReturn++;} block {
-                allowReturn--;
-                printMessage("funcdef -> function(idlist){}"); 
-            }
             FUNCTION {
-                symbol_T sym = add_anonymus_func(scope, alpha_yylineno, offset, curr_space);
+                symbol_T sym = add_anonymus_func(scope, alpha_yylineno, offset, getSpace());
 
                 offset++;   /*functions count as variables?*/
                 offset_push(offset);
                 allowReturn++;
-
+                push_func(sym->varName, scope, nextQuadLabel());
                 expr_P expr = newExpr(programfunc_e, sym);
-                mark_quad();
-                emit(jump, NULL, NULL, NULL, alpha_yylineno);
-                emit(funcstart, expr, NULL, NULL, alpha_yylineno);
+                emit(jump, NULL, NULL, NULL, nextQuadLabel(), alpha_yylineno);
+                emit(funcstart, expr, NULL, NULL, nextQuadLabel(), alpha_yylineno);
                 printf("OFFSET BEFORE FUNC %d\n", offset);
                 
-                anonymusFuncSym = sym;  /*this might also need a stack in case of anonymus inside of anonymus*/
                 offset = 0;
             } Lparenthesis idlist { printf("formal args for anonymus func counter : %d\n", offset); } Rparenthesis block {
-                expr_P expr = newExpr(programfunc_e, anonymusFuncSym);
-                emit(funcend, expr, NULL, NULL, alpha_yylineno);
-                patchLabel();
+                symbol_T func = getActiveFunctionFromScopeOut(scope);
+                expr_P expr = newExpr(programfunc_e, func);
+                stack_T funcStruct = pop_func();
+                emit(funcend, expr, NULL, NULL, nextQuadLabel(), alpha_yylineno);
+                patchLabel(funcStruct->startLabel, nextQuadLabel()-1);
                 allowReturn--;
                 offset_stack_T offsettmp = offset_pop();
                 offset = offsettmp->offset; printf("OFFSET AFTER FUNC %d\n", offset);
-                func_pop();
+                
                 $$ = expr;
                 printMessage("funcdef -> function(idlist){}"); 
             }
@@ -699,9 +912,8 @@ const:  NUMBER  {
             printMessage("const -> false"); }     
     ;
 
-idlist:     ID  { 
-                curr_space = formalArg;
-                symbol_T sym = addSymbol($1, func_arg, scope+1, alpha_yylineno, offset, curr_space);
+idlist:     ID  {
+                symbol_T sym = addSymbol($1, func_arg, scope+1, alpha_yylineno, offset, formalArg);
                 offset++;
 
                 if(sym == NULL)
@@ -711,9 +923,8 @@ idlist:     ID  {
                 }
                 printMessage("idlist -> ID"); 
             }   |
-            idlist comma ID { 
-                curr_space = formalArg;
-                symbol_T sym = addSymbol($3, func_arg, scope+1, alpha_yylineno, offset, curr_space);
+            idlist comma ID {
+                symbol_T sym = addSymbol($3, func_arg, scope+1, alpha_yylineno, offset, formalArg);
                 offset++;
 
                 if(sym == NULL)
@@ -729,128 +940,185 @@ idlist:     ID  {
 
 ifstmtprefix:   IF Lparenthesis expr Rparenthesis 
                 {
-                    expr_P result = $3;
+                    expr_P trueExpr = newExpr(constbool_e, NULL);
+                    trueExpr->boolConst = 1;
+                    
                     expr_P numExpr = newExpr(constnum_e, NULL);
-                    numExpr->numConst = 1;
-                    if(result == NULL)
+                    
+
+                    if($3->type == boolexpr_e)
                     {
-                        printf("Syntax error : empty if statement in line %d\n", alpha_yylineno);
-                        exit(-1);
+                        $3->sym = newTemp(&offset, getSpace());
+                        
+                        expr_P falseExpr = newExpr(constbool_e, NULL);
+                        falseExpr->boolConst = 0;
+                        
+                        backPatchList($3->truelist, nextQuadLabel());
+
+                        emit(iop_assign, $3, trueExpr, NULL, nextQuadLabel(), alpha_yylineno);
+                        numExpr->numConst = nextQuadLabel() + 2;
+                        emit(jump, NULL, NULL, numExpr, nextQuadLabel(), alpha_yylineno);
+
+                        backPatchList($3->falselist,nextQuadLabel());
+
+                        emit(iop_assign, $3, falseExpr, NULL, nextQuadLabel(), alpha_yylineno);
                     }
 
-                    mark_quad();
-                    emit(if_noteq, result, numExpr, NULL, alpha_yylineno);    /*if expr != TRUE then jump away*/
+                    numExpr->numConst = nextQuadLabel() + 2;
+                    emit(if_eq, trueExpr, $3, numExpr, nextQuadLabel(), alpha_yylineno);
+                    $$ = nextQuadLabel();
+                    emit(jump, NULL, NULL, NULL, nextQuadLabel(), alpha_yylineno);
                     printMessage("ifstmtprefix -> if(expr)");
                 }
     ;
 
 elseprefix: ELSE {
-                mark_quad();
-                emit(jump, NULL, NULL, NULL, alpha_yylineno);
+                $$ = nextQuadLabel();
+                emit(jump, NULL, NULL, NULL, nextQuadLabel(), alpha_yylineno);
                 printMessage("elsestmtprefix -> else");
             }
     ;
 
 ifstmt :    ifstmtprefix stmt {
-                $$ = patchArg2Label();
+                patchLabel($1, nextQuadLabel());
+                $$ = $1;
                 printMessage("ifstmt -> ifstmtprefix stmt"); 
         }  |
             ifstmt elseprefix stmt  {
-                patchLabel();
-                patchELSEjump($1);
+                patchLabel($1, $2 + 1);
+                patchLabel($2, nextQuadLabel());
                 printMessage("ifstmt -> ifstmt elseprefix stmt"); 
         }
     ;
 
-whilestmt:   WHILE { push_loop(NULL, scope); }  Lparenthesis { mark_quad(); } expr Rparenthesis {
-                expr_P result = $4;
-                expr_P numExpr = newExpr(constnum_e, NULL);
-                numExpr->numConst = 1;
-                if(result == NULL)
+
+
+loopstmt:       { push_loop(); } stmt  {
+                    loopStack* tmp = pop_loop();
+                    if(tmp == NULL)
+                    {
+                        printf("Loop stack shouldn't be empty, exiting...\n");
+                        exit(-1);
+                    }
+                    $$ = tmp;
+                }
+
+        ;
+
+whilestart:     WHILE   { 
+                            $$ = nextQuadLabel();
+                        }
+            ;
+
+whilecond:      Lparenthesis expr Rparenthesis   {
+                    expr_P trueExpr = newExpr(constbool_e, NULL);
+                    trueExpr->boolConst = 1;
+                    expr_P numExpr2 = newExpr(constnum_e, NULL);
+
+                    if($2->type == boolexpr_e)
+                    {
+                        expr_P numExpr = newExpr(constnum_e, NULL);
+                        expr_P falseExpr = newExpr(constbool_e, NULL);
+                        falseExpr->boolConst = 0;
+                        $2->sym = newTemp(&offset, getSpace());
+                        
+                        backPatchList($2->truelist, nextQuadLabel());
+
+                        emit(iop_assign, $2, trueExpr, NULL, nextQuadLabel(), alpha_yylineno);
+                        numExpr->numConst = nextQuadLabel()+2;
+                        emit(jump, NULL, NULL, numExpr, nextQuadLabel(), alpha_yylineno);
+
+                        backPatchList($2->falselist, nextQuadLabel());
+
+                        emit(iop_assign, $2, falseExpr, NULL, nextQuadLabel(), alpha_yylineno); 
+                    }
+
+                    numExpr2->numConst = nextQuadLabel()+2;
+                    emit(if_eq, $2, trueExpr, numExpr2, nextQuadLabel(), alpha_yylineno);
+                    $$ = nextQuadLabel();
+                    emit(jump, NULL, NULL, NULL, nextQuadLabel(), alpha_yylineno);
+                }
+            ;
+
+
+whilestmt:      whilestart whilecond loopstmt  {
+                    expr_P numExpr = newExpr(constnum_e, NULL);
+                    numExpr->numConst = $1;
+                    emit(jump, NULL, NULL, numExpr, nextQuadLabel(), alpha_yylineno);
+                    patchLabel($2, nextQuadLabel());
+
+                    logicList* breaklist = $3->breaklist;
+                    logicList* contlist = $3->continuelist;
+                    while(breaklist != NULL)
+                    {
+                        patchLabel(breaklist->quadNum, nextQuadLabel());
+                        breaklist = breaklist->next;
+                    }
+
+                    while(contlist != NULL)
+                    {
+                        patchLabel(contlist->quadNum, $1);
+                        contlist = contlist->next;
+                    }                                                    
+                    printMessage("whilestmt -> while (expr) stmt"); 
+                }
+            ;
+
+N: { $$ = nextQuadLabel(); emit(jump, NULL, NULL, NULL, nextQuadLabel(), alpha_yylineno); }
+
+forprefix:  FOR Lparenthesis elist M Semicolon expr Semicolon { 
+                expr_P trueExpr = newExpr(constbool_e, NULL);
+                trueExpr->boolConst = 1;
+                if($6->type == boolexpr_e)
                 {
-                    printf("Syntax error : empty while statement in line %d\n", alpha_yylineno);
+                    expr_P numExpr = newExpr(constnum_e, NULL);
+                    expr_P falseExpr = newExpr(constbool_e, NULL);
+                    falseExpr->boolConst = 0;
+                    $6->sym = newTemp(&offset, getSpace());
+                    
+                    backPatchList($6->truelist, nextQuadLabel());
+                    emit(iop_assign, $6, trueExpr, NULL, nextQuadLabel(), alpha_yylineno);
+                    numExpr->numConst = nextQuadLabel()+2;
+                    emit(jump, NULL, NULL, numExpr, nextQuadLabel(), alpha_yylineno);
+                    backPatchList($6->falselist, nextQuadLabel());
+                    emit(iop_assign, $6, falseExpr, NULL, nextQuadLabel(), alpha_yylineno);
+                }
+
+                struct forLoopStruct* loopStruct = (struct forLoopStruct*) malloc(sizeof(struct forLoopStruct));
+                if(loopStruct == NULL)
+                {
+                    printf(ANSI_COLOR_RED"Error with malloc in forprefix rule, in Syntax.y file. Exiting..."ANSI_COLOR_RESET"\n");
                     exit(-1);
                 }
 
-                mark_quad();
-                emit(if_noteq, result, numExpr, NULL, alpha_yylineno);    /*if expr != TRUE then jump away*/
-                push_break_count(breakExists);  /*store the prev counter for break before stmts begin*/
-                push_continue_count(ContinueExists);
-                breakExists = 0;
-                ContinueExists = 0;
-            } stmt {
-                int exprQuadStart = 0;
-                emit(jump, NULL, NULL, NULL, alpha_yylineno);
-                patchArg2Label();       /*patch from stack*/
-                exprQuadStart = patch_thisResult_FromStack();     /*patch the jump i just emitted with a queue*/
-                while(breakExists != 0)
+                loopStruct->condition = $4;
+                loopStruct->enter = nextQuadLabel();
+                $$ = loopStruct;
+                emit(if_eq, $6, trueExpr, NULL, nextQuadLabel(), alpha_yylineno);
+            }
+        ;
+
+forstmt:    forprefix N elist Rparenthesis N loopstmt N    {    
+
+                patchLabel($1->enter, $5+1);
+                patchLabel($2, nextQuadLabel());
+                patchLabel($5, $1->condition);
+                patchLabel($7, $2+1);
+                logicList* breaklist = $6->breaklist;
+                logicList* contlist = $6->continuelist;
+                while(breaklist != NULL)
                 {
-                    patchBreakLabel();
-                    breakExists--;
+                    patchLabel(breaklist->quadNum, nextQuadLabel());
+                    breaklist = breaklist->next;
                 }
-                while(ContinueExists != 0)
+                while(contlist != NULL)
                 {
-                    patchContinueLabel(exprQuadStart);
-                    ContinueExists--;
+                    patchLabel(contlist->quadNum, $2+1);
+                    contlist = contlist->next;
                 }
-                breakExists = pop_break_count();
-                ContinueExists = pop_continue_count();
-
-                pop_loop();
-                printMessage("whilestmt -> while (expr) stmt"); 
-            } 
-    ;
-
-forstmt:    FOR { push_loop(NULL, scope); } Lparenthesis elist Semicolon { mark_queue_quad(); /*(1)mark the start of expr*/} expr {
-                expr_P result = $6;
-                expr_P numExpr = newExpr(constnum_e, NULL);
-                numExpr->numConst = 1;
-
-                if(result == NULL)
-                {
-                    printf("Syntax error : empty for statement in line %d\n", alpha_yylineno);
-                    exit(-1);
-                }
-                
-                mark_next_quad();   /*because of the stack i have to first mark the false jump and then the true jump*/
-                mark_quad();
-                emit(if_eq, result, numExpr, NULL, alpha_yylineno);    /*(2)if expr == TRUE then jump to stmts*/
-                emit(jump, NULL, NULL, NULL, alpha_yylineno);          /*false jump*/
-
-            } Semicolon { mark_queue_quad(); /*(3)mark step (elist2)*/} elist{
-
-                emit(jump, NULL, NULL, NULL, alpha_yylineno);   /*loop jump to expr*/
-                patch_loop_label();                              /*(1)patch for expr*/
-
-            } Rparenthesis {
-                patchArg2Label();   /*(2)patch jump to the start of stmts*/
-                push_break_count(breakExists);  /*store the prev counter for break before stmts begin*/
-                push_continue_count(ContinueExists);
-                breakExists = 0;
-                ContinueExists = 0;
-            } stmt {
-                int exprQuadStart = 0;
-                emit(jump, NULL, NULL, NULL, alpha_yylineno);    /*closure jump*/
-                exprQuadStart = patch_loop_label();          /*(3) patch step (closure jump)*/
-                patchLabel();
-
-                while(breakExists != 0)
-                {
-                    patchBreakLabel();
-                    breakExists--;
-                }
-                while(ContinueExists != 0)
-                {
-                    patchContinueLabel(exprQuadStart);
-                    ContinueExists--;
-                }
-                breakExists = pop_break_count();
-                ContinueExists = pop_continue_count();
-
-                pop_loop();
-                printMessage("forstmt -> for(elist;expr;elist)stmt"); 
-            }  
-    ;
+                printMessage("forstmt -> for(elist;expr;elist) stmt");
+            }
+        ;
 
 
 returnstmt: RETURN Semicolon { 
@@ -859,7 +1127,7 @@ returnstmt: RETURN Semicolon {
                     printf(ANSI_COLOR_RED"Syntax error in line <%d>: return is not allowed outside of a function"ANSI_COLOR_RESET"\n", alpha_yylineno);
                     exit(-1);
                 }
-                emit(ret, NULL, NULL, NULL, alpha_yylineno);
+                emit(ret, NULL, NULL, NULL, nextQuadLabel(), alpha_yylineno);
                 printMessage("returnstmt -> return;"); 
             }    |
             RETURN expr Semicolon   { 
@@ -869,7 +1137,7 @@ returnstmt: RETURN Semicolon {
                     printf(ANSI_COLOR_RED"Syntax error in line <%d>: return is not allowed outside of a function"ANSI_COLOR_RESET"\n", alpha_yylineno);
                     exit(-1);
                 }
-                emit(ret, expr, NULL, NULL, alpha_yylineno);    /*return the expr*/
+                emit(ret, expr, NULL, NULL, nextQuadLabel(), alpha_yylineno);    /*return the expr*/
                 printMessage("returnstmt -> return expr;"); }
     ;
 
