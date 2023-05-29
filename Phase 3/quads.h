@@ -59,6 +59,12 @@ typedef struct quad_ {
 } quad, *quad_T;
 
 
+typedef struct method_call {
+	int isMethod;
+	expr* elist;
+	char* name;
+}method_call, *method_call_T;
+
 
 void emit(enum iopcode op, expr* result, expr* arg1, expr* arg2, unsigned int label, unsigned int line);
 
@@ -73,6 +79,10 @@ void backPatchList(logicList* list, int quadno);
 void patchLabel(unsigned int quadnumber, unsigned int label);
 
 expr_P newExpr(enum expr_t type, symbol* sym);
+
+void emit_param_recursive(expr_P elist, int line);
+
+expr_P rule_call(expr_P lvalue, expr_P elist, int *offset, enum scopespace_t space, int scope, int line);
 
 symbol* newTemp(int *offset, enum scopespace_t space);
 

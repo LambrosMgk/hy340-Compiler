@@ -104,6 +104,38 @@ void patchLabel(unsigned int quadnumber, unsigned int label)
 	quads[quadnumber].arg2 = expr;
 }
 
+void emit_param_recursive(expr_P elist, int line)
+{
+    expr_P tmp = elist;
+    
+    if(tmp == NULL || elist->type == nil_e)
+        return;
+
+    emit_param_recursive(tmp->next, line);
+
+    emit(param, tmp, NULL, NULL, nextQuadLabel(), line);
+}
+
+expr_P rule_call(expr_P lvalue, expr_P elist, int *offset, enum scopespace_t space, int scope, int line)
+{
+    expr_P func = lvalue;
+    expr_P result = newExpr(var_e, newTemp(offset, space));
+
+    
+    if(lvalue->type == tableitem_e)
+    {
+        func = newExpr(var_e, newTemp(&offset, space));
+        emit(tablegetelem, lvalue, lvalue->index, func, nextQuadLabel(), line);
+    }
+
+    emit_param_recursive(elist, line);
+   
+    emit(call, func, NULL, NULL, nextQuadLabel(), line);
+    emit(getretval, result, NULL, NULL, nextQuadLabel(), line);
+
+    return result;
+}
+
 expr_P newExpr(enum expr_t type, symbol* sym)
 {
     expr_P expr = (expr_P) malloc(sizeof(struct expr_));

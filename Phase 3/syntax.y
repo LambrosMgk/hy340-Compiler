@@ -68,6 +68,7 @@
     struct expr_ *exprPtr;
     struct loopStack *loopStackStruct;
     struct forLoopStruct* forLoopStruct;
+    struct method_call *method_call;
 }
 
 
@@ -78,12 +79,13 @@
 %token<strVal> Lparenthesis Rparenthesis LCurlyBracket RCurlyBracket LSquareBracket RSquareBracket Semicolon comma colon coloncolon dot dotdot
 
 %type<exprPtr> lvalue primary term expr const elist objectdef assignexpr member funcdef
-%type<exprPtr> call callsuffix normcall methodcall stmt indexed indexedelem
+%type<exprPtr> call stmt indexed indexedelem
 %type<strVal>  block idlist whilestmt forstmt returnstmt
 %type<intVal> M N ifstmt ifstmtprefix elseprefix whilestart whilecond
 
 %type<loopStackStruct> loopstmt
 %type<forLoopStruct> forprefix
+%type<method_call> callsuffix normcall methodcall
 
 %right assign
 %left OR
@@ -352,7 +354,7 @@ expr:   assignexpr { $$ = $1; printMessage("expr -> assignexpr"); } |
                 bool_expr->boolConst = 1;
                 $1->truelist = makelist(nextQuadLabel());
                 $1->falselist = makelist(nextQuadLabel()+1);
-                emit(if_eq, bool_expr, $1, NULL, nextQuadLabel(), alpha_yylineno);
+                emit(if_eq, $1, bool_expr, NULL, nextQuadLabel(), alpha_yylineno);
                 emit(jump, NULL, NULL, NULL, nextQuadLabel(), alpha_yylineno);
 
                 backPatchList($1->truelist, nextQuadLabel());
@@ -370,7 +372,7 @@ expr:   assignexpr { $$ = $1; printMessage("expr -> assignexpr"); } |
             bool_expr->boolConst = 1;
             $5->truelist = makelist(nextQuadLabel());
             $5->falselist = makelist(nextQuadLabel()+1);
-            emit(if_eq, bool_expr, $5, NULL, nextQuadLabel(), alpha_yylineno);
+            emit(if_eq, $5, bool_expr, NULL, nextQuadLabel(), alpha_yylineno);
             emit(jump, NULL, NULL, NULL, nextQuadLabel(), alpha_yylineno);
         }
         
@@ -392,7 +394,7 @@ expr:   assignexpr { $$ = $1; printMessage("expr -> assignexpr"); } |
                 bool_expr->boolConst = 1;
                 $1->truelist = makelist(nextQuadLabel());
                 $1->falselist = makelist(nextQuadLabel()+1);
-                emit(if_eq, bool_expr, $1, NULL, nextQuadLabel(), alpha_yylineno);
+                emit(if_eq, $1, bool_expr, NULL, nextQuadLabel(), alpha_yylineno);
                 emit(jump, NULL, NULL, NULL, nextQuadLabel(), alpha_yylineno);
 
                 backPatchList($1->falselist, nextQuadLabel());
@@ -408,7 +410,7 @@ expr:   assignexpr { $$ = $1; printMessage("expr -> assignexpr"); } |
             bool_expr->boolConst = 1;
             $5->truelist   = makelist(nextQuadLabel());
             $5->falselist  = makelist(nextQuadLabel()+1);
-            emit(if_eq, bool_expr, $5, NULL, nextQuadLabel(), alpha_yylineno);
+            emit(if_eq, $5, bool_expr, NULL, nextQuadLabel(), alpha_yylineno);
             emit(jump, NULL, NULL, NULL, nextQuadLabel(), alpha_yylineno);
         }
 
@@ -450,7 +452,7 @@ term:   Lparenthesis expr Rparenthesis {
                 trueExpr->boolConst = 1;
                 $$->truelist = makelist(nextQuadLabel()+1);
                 $$->falselist = makelist(nextQuadLabel());
-                emit(if_eq, trueExpr, $2, NULL, nextQuadLabel(), alpha_yylineno);
+                emit(if_eq, $2, trueExpr, NULL, nextQuadLabel(), alpha_yylineno);
                 emit(jump, NULL, NULL, NULL, nextQuadLabel(), alpha_yylineno);
             }
             else
@@ -698,34 +700,94 @@ member:     lvalue dot ID   {
             call LSquareBracket expr RSquareBracket { printMessage("member -> call[expr]"); }
     ;
 
-call:       call Lparenthesis elist Rparenthesis    { printMessage("call -> call(elist)"); }   |
+call:       call Lparenthesis elist Rparenthesis    { 
+                $$ = rule_call($$, $3, &offset, getSpace(), scope, alpha_yylineno);
+                
+                printMessage("call -> call(elist)");
+        }   |
             lvalue callsuffix   {
-                expr_P tmp = $2;    /*get callsuffix (only done normcall tho)*/
-                while(tmp != NULL)    /*go to the end of the list*/
+                expr* tmp = $2->elist;  //elist tou call (normal or method call)
+
+                if(is_lib_func($1->sym->varName) == 1)
+                    $1->type = libraryfunc_e;
+                
+                
+                if($2->isMethod == 1)
                 {
-                    emit(param, tmp, NULL, NULL, nextQuadLabel(), alpha_yylineno);/*emit param for every struct in the elist list*/
-                    tmp = tmp->next;
+                    expr* func = $1;
+                    expr* memberItem;
+                    expr* result = func;
+                    if(func->type == tableitem_e)
+                    {
+                        result = newExpr(var_e, newTemp(&offset, getSpace()));
+                        emit(tablegetelem, func, func->index, result, nextQuadLabel(), alpha_yylineno);
+                    }
+
+                    expr* memberItem = newExpr(tableitem_e, lvalue->sym);
+                    memberItem->index = newExpr(conststring_e, NULL);
+                    memberItem->index->strConst = $2->name;
+
+
+                    $1 = memberItem;
+                    if(memberItem->type == tableitem_e)
+                    {
+                        $1 = newExpr(var_e, newTemp(&offset, getSpace()));
+                        emit(tablegetelem, memberItem, memberItem->index, $1, nextQuadLabel(), alpha_yylineno);
+                    }
+
+
+                    func->next = tmp;   //connect func expr with elist
+                    $2->elist = func;
                 }
-                emit(call, $1, NULL, NULL, nextQuadLabel(), alpha_yylineno);
-                symbol_T temp = newTemp(&offset, getSpace());
-                expr_P result = newExpr(var_e, temp);
-                emit(getretval, result, NULL, NULL, nextQuadLabel(), alpha_yylineno);
-                $$ = result;
+
+                $$ = rule_call(lvalue, $2->elist, &offset, getSpace(), scope, alpha_yylineno);
+
                 printMessage("call -> lvalue callsuffix");
         }  |
-            Lparenthesis funcdef Rparenthesis Lparenthesis elist Rparenthesis   { printMessage("call -> (funcdef)(elist)"); }
+            Lparenthesis funcdef Rparenthesis Lparenthesis elist Rparenthesis   {
+                $$ = rule_call($2, $5, &offset, getSpace(), scope, alpha_yylineno);
+
+                printMessage("call -> (funcdef)(elist)");
+            }
     ;
 
 callsuffix: normcall    { $$ = $1; printMessage("callsuffix -> normcall"); } |
-            methodcall  { printMessage("callsuffix -> methodcall"); }
+            methodcall  { $$ = $1; printMessage("callsuffix -> methodcall"); }
     ;
 
 normcall:   Lparenthesis elist Rparenthesis {
-            $$ = $2;
-            printMessage("normcall -> (elist)"); }
+                method_call *meth_call = (method_call *) malloc(sizeof(struct method_call));
+                
+                if(meth_call == NULL)
+                {
+                    printf("Error with malloc in normcall call rule.\n");
+                    exit(-1);
+                }
+
+                $$ = meth_call;
+                $$->elist = $2;
+                $$->isMethod = 0;
+                $$->name = NULL;
+                printMessage("normcall -> (elist)");
+            }
     ;
 
-methodcall: dotdot ID Lparenthesis elist Rparenthesis   { printMessage("..ID(elist)"); }
+methodcall: dotdot ID Lparenthesis elist Rparenthesis   { 
+                method_call *meth_call = (method_call *) malloc(sizeof(struct method_call));
+                
+                if(meth_call == NULL)
+                {
+                    printf("Error with malloc in normcall call rule.\n");
+                    exit(-1);
+                }
+
+                $$ = meth_call;
+                $$->elist = $4;
+                $$->isMethod = 1;
+                $$->name = $2;
+
+                printMessage("..ID(elist)"); 
+            }
     ;
 
 elist: expr { 
@@ -832,6 +894,7 @@ funcdef:    FUNCTION ID {
                 offset++;   /*functions count as variables?*/
                 offset_push(offset);
                 expr_P expr = newExpr(programfunc_e, sym);
+                $$ = expr;
                 emit(jump, NULL, NULL, NULL, nextQuadLabel(), alpha_yylineno); /*create empty jump that will later be filled with the end of this function*/
                 emit(funcstart, expr, NULL, NULL, nextQuadLabel(), alpha_yylineno);
 
@@ -848,10 +911,11 @@ funcdef:    FUNCTION ID {
 
                 stack_T funcStruct = pop_func();
                 emit(funcend, expr, NULL, NULL, nextQuadLabel(), alpha_yylineno);
-                patchLabel(funcStruct->startLabel, nextQuadLabel()-1);
+                patchLabel(funcStruct->startLabel, nextQuadLabel());
                 allowReturn--;
                 offset_stack_T offsettmp = offset_pop();
                 offset = offsettmp->offset; printf("OFFSET AFTER FUNC %d\n", offset);   //remove this later
+
                 printMessage("funcdef -> function id(idlist){stmts}");
             }   |
             FUNCTION {
@@ -872,7 +936,7 @@ funcdef:    FUNCTION ID {
                 expr_P expr = newExpr(programfunc_e, func);
                 stack_T funcStruct = pop_func();
                 emit(funcend, expr, NULL, NULL, nextQuadLabel(), alpha_yylineno);
-                patchLabel(funcStruct->startLabel, nextQuadLabel()-1);
+                patchLabel(funcStruct->startLabel, nextQuadLabel());
                 allowReturn--;
                 offset_stack_T offsettmp = offset_pop();
                 offset = offsettmp->offset; printf("OFFSET AFTER FUNC %d\n", offset);
@@ -965,7 +1029,7 @@ ifstmtprefix:   IF Lparenthesis expr Rparenthesis
                     }
 
                     numExpr->numConst = nextQuadLabel() + 2;
-                    emit(if_eq, trueExpr, $3, numExpr, nextQuadLabel(), alpha_yylineno);
+                    emit(if_eq, $3, trueExpr, numExpr, nextQuadLabel(), alpha_yylineno);
                     $$ = nextQuadLabel();
                     emit(jump, NULL, NULL, NULL, nextQuadLabel(), alpha_yylineno);
                     printMessage("ifstmtprefix -> if(expr)");
