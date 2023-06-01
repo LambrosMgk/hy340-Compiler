@@ -75,7 +75,7 @@ void print_token_list(alpha_token_t head)
 
 
 keyword "if"{1}|"else"{1}|"while"{1}|"for"{1}|"function"{1}|"return"{1}|"break"{1}|"continue"{1}|"and"{1}|"not"{1}|"or"{1}|"local"{1}|"true"{1}|"false"{1}|"nil"{1}
-operator "="+|"+"+|"-"+|"*"+|"/"+|"%"+|"=="+|"!="+|"++"+|"--"+|">"{1}|"<"{1}|">="{1}|"<="{1}
+operator "="|"+"|"-"|"*"|"/"|"%"|"=="|"!="|"++"|"--"|">"{1}|"<"{1}|">="{1}|"<="{1}
 integer [0-9][0-9]*
 real	[0-9]*\.[0-9](e|E)?[0-9]*
 string \"(\\.|[^"\\])*\"
@@ -292,7 +292,7 @@ undefined [^keyword^operator^integer^real^string^punctuation^id^whitespace]
 	fprintf(alpha_yyout, "Line <%d> Col <%d>: #<%d> \"%s\" INTEGER\n", alpha_yylineno, column, ++total_tokens, alpha_yytext);
 	addColCounter(alpha_yyleng);
 
-	alpha_yylval.intVal = atoi(alpha_yytext);
+	alpha_yylval.doubleval = atoi(alpha_yytext);
 
 	return NUMBER;
 }

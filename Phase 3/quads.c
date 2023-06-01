@@ -124,8 +124,8 @@ expr_P rule_call(expr_P lvalue, expr_P elist, int *offset, enum scopespace_t spa
     
     if(lvalue->type == tableitem_e)
     {
-        func = newExpr(var_e, newTemp(&offset, space));
-        emit(tablegetelem, lvalue, lvalue->index, func, nextQuadLabel(), line);
+        func = newExpr(var_e, newTemp(offset, space));
+        emit(tablegetelem, func, lvalue, lvalue->index, nextQuadLabel(), line);
     }
 
     emit_param_recursive(elist, line);
@@ -211,7 +211,7 @@ void writeQuadsToFile()
     for(int i = 0; i < currQuad; i++)
     {
         fprintf(out, "<%d>:   op: %12s,    ", p->label, iopToString[p->op]);
-        printf("now emitting %s\n", iopToString[p->op]);
+        //printf("now emitting %s\n", iopToString[p->op]);
         
         if(p->result == NULL)
             fprintf(out, "  result: ----------,      ");
@@ -226,9 +226,9 @@ void writeQuadsToFile()
             else
                 fprintf(out, "  result: %10s,    ", "TRUE");
         }
-        else if(p->result->type == conststring_e || p->result->type == tableitem_e)
+        else if(p->result->type == conststring_e)
             fprintf(out, "  result: %10s,    ", p->result->strConst);
-        else if(p->result->sym != NULL)/* p->result->sym != NULL, result must always be a variable*/
+        else if(p->result->sym != NULL || p->result->type == tableitem_e)/* p->result->sym != NULL, result must always be a variable*/
             fprintf(out, "  result: %10s,     ", p->result->sym->varName);
         else
             fprintf(out, "  result: ???????????");

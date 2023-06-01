@@ -12,7 +12,7 @@
 
     int scope = 0, offset = 0;
     int allowReturn = 0;
-    int breakExists = 0, ContinueExists = 0;
+    int openloops = 0;
 
      enum scopespace_t getSpace()
     {
@@ -139,7 +139,7 @@ stmt:   expr Semicolon {
         returnstmt { printMessage("stmt -> return statement");} |
         BREAK Semicolon { 
 
-            if(isLoopStackEmpty() == 1)
+            if(isLoopStackEmpty() == 1 || openloops == 0)
             {
                 printf(ANSI_COLOR_RED"Syntax error in line <%d>: break usage is not allowed outside of a loop"ANSI_COLOR_RESET"\n", alpha_yylineno);
                 exit(-1); 
@@ -154,7 +154,7 @@ stmt:   expr Semicolon {
         } |
         CONTINUE Semicolon { 
 
-            if(isLoopStackEmpty() == 1)
+            if(isLoopStackEmpty() == 1 || openloops == 0)
             {
                 printf(ANSI_COLOR_RED"Syntax error in line <%d>: continue usage is not allowed outside of a loop"ANSI_COLOR_RESET"\n", alpha_yylineno);
                 exit(-1); 
@@ -535,12 +535,12 @@ assignexpr:     lvalue assign expr  {
             if($1->type == tableitem_e)
             {
                 emit(tablesetelem, $1, $1->index, $3, nextQuadLabel(), alpha_yylineno);
+                printf(ANSI_COLOR_GREEN"$1->index->numConst : %d, $3 numConst : %d\n"ANSI_COLOR_RESET, $1->index->numConst, $3->numConst);
                 expr* lvalue = $1;
                 if($1->type == tableitem_e)
                 {
-                    lvalue = newExpr(var_e, NULL);
-                    lvalue->sym = newTemp(&offset, getSpace());
-                    emit(tablegetelem, $1, $1->index, lvalue, nextQuadLabel(), alpha_yylineno);
+                    lvalue = newExpr(var_e, newTemp(&offset, getSpace()));
+                    emit(tablegetelem, lvalue, $1, $1->index, nextQuadLabel(), alpha_yylineno);
                 }
                 $$ = lvalue;
                 $$->type = assignexpr_e;
@@ -561,7 +561,14 @@ assignexpr:     lvalue assign expr  {
     ;
 
 primary:    lvalue  {
-                $$ = $1;
+                if($1->type == tableitem_e)
+                {
+                    $$ = newExpr(var_e, newTemp(&offset, getSpace()));
+                    emit(tablegetelem, $$, $1, $1->index, nextQuadLabel(), alpha_yylineno);
+                }
+                else
+                    $$ = $1;
+
                 printMessage("primary -> lvalue"); 
             }    |
             call    { $$ = $1; printMessage("primary -> call"); }    |
@@ -652,7 +659,7 @@ member:     lvalue dot ID   {
                 {
                     lvalue = newExpr(var_e, NULL);
                     lvalue->sym = newTemp(&offset, getSpace());
-                    emit(tablegetelem, $1, $1->index, lvalue, nextQuadLabel(), alpha_yylineno);
+                    emit(tablegetelem, lvalue, $1, $1->index, nextQuadLabel(), alpha_yylineno);
                 }
                 
                 $$ = newExpr(tableitem_e, NULL);
@@ -685,9 +692,8 @@ member:     lvalue dot ID   {
 
                 if($1->type == tableitem_e)
                 {
-                    lvalue = newExpr(var_e, NULL);
-                    lvalue->sym = newTemp(&offset, getSpace());
-                    emit(tablegetelem, $1, $1->index, lvalue, nextQuadLabel(), alpha_yylineno);
+                    lvalue = newExpr(var_e, newTemp(&offset, getSpace()));
+                    emit(tablegetelem, lvalue, $1, $1->index, nextQuadLabel(), alpha_yylineno);
                 }
 
                 $$ = newExpr(tableitem_e, NULL);
@@ -711,7 +717,7 @@ call:       call Lparenthesis elist Rparenthesis    {
                 if(is_lib_func($1->sym->varName) == 1)
                     $1->type = libraryfunc_e;
                 
-                
+               
                 if($2->isMethod == 1)
                 {
                     expr* func = $1;
@@ -720,10 +726,10 @@ call:       call Lparenthesis elist Rparenthesis    {
                     if(func->type == tableitem_e)
                     {
                         result = newExpr(var_e, newTemp(&offset, getSpace()));
-                        emit(tablegetelem, func, func->index, result, nextQuadLabel(), alpha_yylineno);
+                        emit(tablegetelem, result, func, func->index, nextQuadLabel(), alpha_yylineno);
                     }
 
-                    expr* memberItem = newExpr(tableitem_e, lvalue->sym);
+                    memberItem = newExpr(tableitem_e, result->sym);
                     memberItem->index = newExpr(conststring_e, NULL);
                     memberItem->index->strConst = $2->name;
 
@@ -732,7 +738,7 @@ call:       call Lparenthesis elist Rparenthesis    {
                     if(memberItem->type == tableitem_e)
                     {
                         $1 = newExpr(var_e, newTemp(&offset, getSpace()));
-                        emit(tablegetelem, memberItem, memberItem->index, $1, nextQuadLabel(), alpha_yylineno);
+                        emit(tablegetelem, $1, memberItem, memberItem->index, nextQuadLabel(), alpha_yylineno);
                     }
 
 
@@ -740,7 +746,7 @@ call:       call Lparenthesis elist Rparenthesis    {
                     $2->elist = func;
                 }
 
-                $$ = rule_call(lvalue, $2->elist, &offset, getSpace(), scope, alpha_yylineno);
+                $$ = rule_call($1, $2->elist, &offset, getSpace(), scope, alpha_yylineno);
 
                 printMessage("call -> lvalue callsuffix");
         }  |
@@ -888,13 +894,13 @@ funcdef:    FUNCTION ID {
                     printf(ANSI_COLOR_RED"Syntax error in line <%d>: redeclaration of %s as function"ANSI_COLOR_RESET"\n", alpha_yylineno, $2);
                     exit(-1);
                 }
-                addSymbol($2, user_func, scope, alpha_yylineno, offset, getSpace()); 
+                sym = addSymbol($2, user_func, scope, alpha_yylineno, offset, getSpace()); 
 
                 push_func($2, scope, nextQuadLabel());
                 offset++;   /*functions count as variables?*/
                 offset_push(offset);
                 expr_P expr = newExpr(programfunc_e, sym);
-                $$ = expr;
+                
                 emit(jump, NULL, NULL, NULL, nextQuadLabel(), alpha_yylineno); /*create empty jump that will later be filled with the end of this function*/
                 emit(funcstart, expr, NULL, NULL, nextQuadLabel(), alpha_yylineno);
 
@@ -904,12 +910,13 @@ funcdef:    FUNCTION ID {
             Lparenthesis idlist {
                 printf(ANSI_COLOR_GREEN"formal args counter : %d"ANSI_COLOR_RESET"\n", offset);
             }
-            Rparenthesis {allowReturn++;}
+            Rparenthesis {allowReturn++; openloops = 0;}
             block  {
                 symbol_T sym = getElement($2, scope);
                 expr_P expr = newExpr(programfunc_e, sym);
 
                 stack_T funcStruct = pop_func();
+                $$ = expr;
                 emit(funcend, expr, NULL, NULL, nextQuadLabel(), alpha_yylineno);
                 patchLabel(funcStruct->startLabel, nextQuadLabel());
                 allowReturn--;
@@ -931,7 +938,7 @@ funcdef:    FUNCTION ID {
                 printf("OFFSET BEFORE FUNC %d\n", offset);
                 
                 offset = 0;
-            } Lparenthesis idlist { printf("formal args for anonymus func counter : %d\n", offset); } Rparenthesis block {
+            } Lparenthesis idlist { printf("formal args for anonymus func counter : %d\n", offset); openloops = 0; } Rparenthesis block {
                 symbol_T func = getActiveFunctionFromScopeOut(scope);
                 expr_P expr = newExpr(programfunc_e, func);
                 stack_T funcStruct = pop_func();
@@ -1057,8 +1064,9 @@ ifstmt :    ifstmtprefix stmt {
 
 
 
-loopstmt:       { push_loop(); } stmt  {
+loopstmt:       { openloops++; push_loop(); } stmt  {
                     loopStack* tmp = pop_loop();
+                    openloops--;
                     if(tmp == NULL)
                     {
                         printf("Loop stack shouldn't be empty, exiting...\n");
