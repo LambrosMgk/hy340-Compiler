@@ -3,6 +3,7 @@
         "stdlib.h": "c",
         "stackandqueue.h": "c",
         "offset_stack.h": "c",
-        "string.h": "c"
+        "string.h": "c",
+        "assert.h": "c"
     }
 }
