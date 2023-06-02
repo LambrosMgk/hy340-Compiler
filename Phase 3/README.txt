@@ -44,3 +44,5 @@ sto al.l o kanonas operator palia eixe "-"+| to opoio tou elege 1 ews apeira '-'
 kapoio legit operator, afairesa to '+' opote twra o kanonas leei pws mporei na dei mono ena '-'.
 
 sto term prosthesa thn periptwsh na einai table, opote prwta na kane emit gia tablegeitem kai meta to ++ -- klp
+
+allaxa to uminus se mul me -1

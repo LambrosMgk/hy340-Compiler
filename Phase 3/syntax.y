@@ -435,11 +435,14 @@ term:   Lparenthesis expr Rparenthesis {
             printMessage("term -> (expr)"); 
         } |
         minus expr %prec uminus {   /*%prec uminus gia na deixw oti exei idia proteraiothta me to dhlwmeno uminus*/
-            expr_P exprPtr = $2;
+            expr_P numExpr = newExpr(constnum_e, NULL);
+            numExpr->numConst = -1;
             
-            check_for_func_error(exprPtr->sym);
-            emit(iop_uminus, exprPtr, NULL, NULL, nextQuadLabel(), alpha_yylineno);
-            $$ = exprPtr;
+            check_for_func_error($2->sym);
+
+            $$ = newexpr(arithexpr_e, newTemp(&offset, getSpace()));
+            emit(iop_mul, $$, numExpr, $2, nextQuadLabel(), alpha_yylineno);
+
             printMessage("term -> uminus expr");
         } |
         NOT expr    {
@@ -505,7 +508,7 @@ term:   Lparenthesis expr Rparenthesis {
                 emit(tablesetelem, $1, $1->index, value, nextQuadLabel(), alpha_yylineno);
             }
             else
-            { 
+            {
                 emit(iop_assign, $$, $1, NULL, nextQuadLabel(), alpha_yylineno); /*assign old value to a temp, post increment*/
                 emit(iop_add, $1, numExpr, $1, nextQuadLabel(), alpha_yylineno);
             }
