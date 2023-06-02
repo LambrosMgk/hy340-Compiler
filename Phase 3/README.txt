@@ -42,3 +42,5 @@ thn auxwmeiwno kathe fora sto loop statement, logika den me noiazei na krataw pr
 
 sto al.l o kanonas operator palia eixe "-"+| to opoio tou elege 1 ews apeira '-' opote mporouse na parei 3 sthn seira to opoio den einai
 kapoio legit operator, afairesa to '+' opote twra o kanonas leei pws mporei na dei mono ena '-'.
+
+sto term prosthesa thn periptwsh na einai table, opote prwta na kane emit gia tablegeitem kai meta to ++ -- klp

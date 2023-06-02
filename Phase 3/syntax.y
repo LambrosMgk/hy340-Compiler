@@ -469,19 +469,47 @@ term:   Lparenthesis expr Rparenthesis {
             numExpr->numConst = 1;
 
             check_for_func_error(exprPtr->sym);
-            emit(iop_add, exprPtr, exprPtr, numExpr, nextQuadLabel(), alpha_yylineno);   /*pre increment*/
+
+            if($2->type == tableitem_e)
+            {
+                expr_P result = newExpr(var_e, newTemp(&offset, getSpace()));
+                emit(tablegetelem, result, $2, $2->index, nextQuadLabel(), alpha_yylineno);
+                $$ = result;
+
+                emit(iop_add, $$, numExpr, $$, nextQuadLabel(), alpha_yylineno);
+                emit(tablesetelem, $2, $2->index, $$ ,nextQuadLabel(), alpha_yylineno);
+            }
+            else
+            {
+                emit(iop_add, $2, numExpr, $2, nextQuadLabel(), alpha_yylineno);
+                $$ = newExpr(arithexpr_e, newTemp(&offset, getSpace()));
+                emit(iop_assign, $$, $2, NULL, nextQuadLabel(), alpha_yylineno);
+            }
+
             printMessage("term -> ++lvalue");
         } |
         lvalue plusplus { 
             expr_P exprPtr = $1, numExpr = newExpr(constnum_e, NULL);
             numExpr->numConst = 1;
-            symbol_T temp = newTemp(&offset, getSpace());
-            expr_P result = newExpr(var_e, temp);
-            $$ = result;
+            $$ = newExpr(var_e, newTemp(&offset, getSpace()));
 
             check_for_func_error(exprPtr->sym); 
-            emit(iop_assign, result, exprPtr, NULL, nextQuadLabel(), alpha_yylineno);    /*assign old value to a temp, post increment*/
-            emit(iop_add, exprPtr, exprPtr, numExpr, nextQuadLabel(), alpha_yylineno);
+
+            if($1->type == tableitem_e)
+            {
+                expr_P value = newExpr(var_e, newTemp(&offset, getSpace()));
+                emit(tablegetelem, value, $1, $1->index, nextQuadLabel(), alpha_yylineno);
+
+                emit(iop_assign, $$, value, NULL, nextQuadLabel(), alpha_yylineno);
+                emit(iop_add, value, numExpr, value, nextQuadLabel(), alpha_yylineno);
+                emit(tablesetelem, $1, $1->index, value, nextQuadLabel(), alpha_yylineno);
+            }
+            else
+            { 
+                emit(iop_assign, $$, $1, NULL, nextQuadLabel(), alpha_yylineno); /*assign old value to a temp, post increment*/
+                emit(iop_add, $1, numExpr, $1, nextQuadLabel(), alpha_yylineno);
+            }
+
             printMessage("term -> lvalue++");
         } |
         minusminus lvalue   { 
@@ -490,19 +518,48 @@ term:   Lparenthesis expr Rparenthesis {
             numExpr->numConst = 1;
 
             check_for_func_error(exprPtr->sym);
-            emit(iop_sub, exprPtr, exprPtr, numExpr, nextQuadLabel(), alpha_yylineno);   /*pre decrement*/
+
+            if($2->type == tableitem_e)
+            {
+                expr_P value = newExpr(var_e, newTemp(&offset, getSpace()));
+                emit(tablegetelem, value, $2, $2->index, nextQuadLabel(), alpha_yylineno);
+                $$ = value;
+
+                emit(iop_sub, $$, numExpr, $$, nextQuadLabel(), alpha_yylineno);
+                emit(tablesetelem, $2, $2->index, $$, nextQuadLabel(), alpha_yylineno);
+            }
+            else
+            {
+                emit(iop_sub, $2, numExpr, $2, nextQuadLabel(), alpha_yylineno); /*pre decrement*/
+                $$ = newExpr(arithexpr_e, newTemp(&offset, getSpace()));
+                emit(iop_assign, $$, $2, NULL, nextQuadLabel(), alpha_yylineno);
+            }
+
             printMessage("term -> --lvalue");
         } |
         lvalue minusminus   { 
             expr_P exprPtr = $1, numExpr = newExpr(constnum_e, NULL);
             numExpr->numConst = 1;
-            symbol_T temp = newTemp(&offset, getSpace());
-            expr_P result = newExpr(var_e, temp);
-            $$ = result;
+
+            $$ = newExpr(var_e, newTemp(&offset, getSpace()));
 
             check_for_func_error(exprPtr->sym);
-            emit(iop_assign, result, exprPtr, NULL, nextQuadLabel(), alpha_yylineno);    /*assign old value to a temp, post decrement*/
-            emit(iop_sub, exprPtr, exprPtr, numExpr, nextQuadLabel(), alpha_yylineno);
+
+            if($1->type == tableitem_e)
+            {
+                expr_P value = newExpr(var_e, newTemp(&offset, getSpace()));
+                emit(tablegetelem, value, $1, $1->index, nextQuadLabel(), alpha_yylineno);
+
+                emit(iop_assign, $$, value, NULL, nextQuadLabel(), alpha_yylineno);
+                emit(iop_sub, value, value, numExpr, nextQuadLabel(), alpha_yylineno);
+                emit(tablesetelem, $1, $1->index, value, nextQuadLabel(), alpha_yylineno);
+            }
+            else
+            { 
+                emit(iop_assign, $$, $1, NULL, nextQuadLabel(), alpha_yylineno); /*assign old value to a temp, post decrement*/
+                emit(iop_sub, $1, numExpr,$1,nextQuadLabel(), alpha_yylineno);
+            }
+
             printMessage("term -> lvalue--");
         } |
         primary { $$ = $1; printMessage("term -> primary");}
