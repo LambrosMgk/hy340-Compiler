@@ -18,7 +18,7 @@
     {
         stack_T tmp = pop_func();
         if(tmp == NULL) /*no function symbols in the stack means we are not in a function definition*/
-            return programmVar;
+            return programVar;
         /*else*/
         push_func(tmp->name, tmp->scope, tmp->startLabel);
         return functionLocal;

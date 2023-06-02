@@ -16,7 +16,7 @@
 /*0 library functions, 1 global var(scope 0), 2 arguments, 3 local vars (scope >= 0) not arguments, 4 user functions*/
 enum SymbolCategory {library_function, global_var, func_arg, local_var, user_func};
 
-enum scopespace_t { programmVar, functionLocal, formalArg };
+enum scopespace_t { programVar, functionLocal, formalArg };
 
 typedef struct symbol_
 {
