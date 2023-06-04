@@ -8,10 +8,11 @@ char *iopToString[] = {"iop_assign", "iop_add", "iop_sub", "iop_mul", "iop_div",
     "iop_OR", "iop_NOT", "if_eq", "if_noteq", "if_lesseq", "if_geatereq", "if_less", "if_greater", "jump", "call",
     "param", "ret", "getretval", "funcstart", "funcend", "tablecreate", "tablegetelem", "tablesetelem"};
 
-quad *quads = (quad_T) 0;
 unsigned int total = 0;
 unsigned int currQuad = 0;
 unsigned int tmpcounter = 0, totaltmp = 0;
+
+quad *quads = (quad_T) 0;
 
 void expand(void)
 {
@@ -38,6 +39,7 @@ void emit(enum iopcode op, expr* result, expr* arg1, expr* arg2, unsigned int la
     p->arg2 = arg2;
     p->label = label;
     p->line = line;
+    p->taddress = 0;
 }
 
 int nextQuadLabel()
@@ -47,13 +49,13 @@ int nextQuadLabel()
 
 logicList* makelist(int quadno)
 {
-
 	logicList* list = (logicList*) malloc(sizeof(logicList));
+    
 	memset(list,0,sizeof(logicList));
 	list->quadNum = quadno;
 	list->next = NULL;
-	return list;
 
+	return list;
 }
 
 logicList* mergeLocicLists(logicList* list1, logicList* list2)

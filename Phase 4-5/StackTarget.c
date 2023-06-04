@@ -32,12 +32,12 @@ void pushFuncStackTarget(symbol* mem)
 
 symbol* popFuncStackTarget()
 {
-    symbol* i = NULL;
+    symbol* sym = NULL;
 
 	if(!isFuncStackTargetEmpty())
     {
 		funcStack *tmp = functionStackTarget;
-		i = tmp->info;
+		sym = tmp->info;
 
 		functionStackTarget = functionStackTarget->next;
 
@@ -45,32 +45,32 @@ symbol* popFuncStackTarget()
 		//free(tmp); //isws na petaei segmentation
 	}
 
-    return i;
+    return sym;
 }
 
 symbol* topFuncStackTarget()
 {
-    symbol* i = NULL;
+    symbol* sym = NULL;
 
 	if(!isFuncStackTargetEmpty())
     {
 		funcStack *tmp = functionStackTarget;
-		i = tmp->info;
+		sym = tmp->info;
 	}
     
-    return i;
+    return sym;
 }
 
 void appendFuncStackTarget(symbol* f, unsigned int instrLabel)
 {
-	returnList* newNode = f->value.funcVal->returnList;
+	returnList* newNode = f->returnList;
 
 	if(newNode == NULL)
     {
 		newNode = (returnList*) malloc (sizeof(returnList));	
 		newNode->instrLabel = instrLabel;
 		newNode->next = NULL;
-		f->value.funcVal->returnList = newNode;
+		f->returnList = newNode;
 	}
     else
     {

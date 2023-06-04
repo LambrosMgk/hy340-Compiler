@@ -4,6 +4,8 @@
         "stackandqueue.h": "c",
         "offset_stack.h": "c",
         "string.h": "c",
-        "assert.h": "c"
+        "assert.h": "c",
+        "system_error": "c",
+        "xlocale": "c"
     }
 }

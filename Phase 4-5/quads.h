@@ -5,9 +5,9 @@
 #include <assert.h>
 
 enum iopcode {
-    iop_assign, iop_add, iop_sub, iop_mul, iop_div, iop_mod, iop_uminus, iop_AND, iop_OR, iop_NOT, if_eq, 
+    iop_assign, iop_add, iop_sub, iop_mul, iop_div, iop_mod, if_eq, 
     if_noteq, if_lesseq, if_greatereq, if_less, if_greater, jump, call, param, ret, getretval, funcstart, funcend, 
-    tablecreate, tablegetelem, tablesetelem
+    tablecreate, tablegetelem, tablesetelem, iop_noop
 };
 
 enum expr_t {
@@ -56,6 +56,7 @@ typedef struct quad_ {
     expr* arg2;
     unsigned label;
     unsigned line;
+    unsigned int taddress;
 } quad, *quad_T;
 
 
@@ -64,6 +65,9 @@ typedef struct method_call {
 	expr* elist;
 	char* name;
 }method_call, *method_call_T;
+
+
+extern quad *quads;
 
 
 void emit(enum iopcode op, expr* result, expr* arg1, expr* arg2, unsigned int label, unsigned int line);

@@ -47,6 +47,11 @@ void init_lib_funcs()
         elem->active = 1;
         elem->scope = 0;
         elem->line = 0;
+        elem->totalargs = 0;
+        elem->iaddress = 0;
+        elem->totallocals = 0;
+        elem->taddress = 0;
+        elem->returnList = NULL;
         elem->nextSym = NULL;
 
         if(symbol_table[0] == NULL)
@@ -193,6 +198,11 @@ symbol_T addSymbol(char * symbol_name, enum SymbolCategory category, int scope, 
         elem->line = line;
         elem->offset = offset;
         elem->space = space;
+        elem->totalargs = 0;
+        elem->iaddress = 0;
+        elem->totallocals = 0;
+        elem->taddress = 0;
+        elem->returnList = NULL;
         elem->nextSym = NULL;
 
         symbol_table[scope] = elem;
@@ -346,4 +356,27 @@ void hide_in_scope(int scope)
         tmp->active = 0;
         tmp = tmp->nextSym;
     }
+}
+
+unsigned int getTotalGlobals()
+{
+    symbol_T tmp = NULL;
+    unsigned int total = 0;
+    
+    for(int i = 0; i < TotalScopes; i++)
+    {
+        tmp = symbol_table[i];
+        while(tmp != NULL)
+        {
+           if(tmp->space == programVar)
+            {
+                total++;
+            }
+
+            tmp = tmp->nextSym;
+        }
+    }
+                
+    return total;
+
 }

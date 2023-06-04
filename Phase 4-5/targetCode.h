@@ -8,6 +8,7 @@ typedef enum vmarg_t vmarg_t;
 typedef struct vmarg vmarg;
 typedef struct instruction instruction;
 typedef struct userfunc userfunc;
+typedef struct funcStack funcStack;
 
 enum vmopcode {
 
@@ -65,36 +66,30 @@ struct userfunc {
 
 };
 
-double*			numConsts;
-unsigned int 	totalNumConsts;
+extern double*	numConsts;
+extern unsigned int totalNumConsts;
 
-char** 			stringConsts;
-unsigned int 	totalStringConsts;
+extern char** stringConsts;
+extern unsigned int totalStringConsts;
 
-char**			namedLibFuncs;
-unsigned int 	totalNamedLibFuncs;
+extern char** namedLibFuncs;
+extern unsigned int totalNamedLibFuncs;
 
-userfunc* 		userFuncs;
-unsigned int 	totalUserFuncs;
+extern userfunc* userFuncs;
+extern unsigned int totalUserFuncs;
 
-instruction*	instructions;
-unsigned int 	totalInstructions; 	
+extern instruction* instructions;
+extern unsigned int totalInstructions; 	
 
-extern funcStack* functionStackTarget;
 
-typedef struct funcStack {
+struct funcStack {
 
 	symbol* info;
 	funcStack* next;
 
-} funcStack;
+};
 
-typedef struct returnList{
-
-    unsigned int    instrLabel;
-    returnList*     next;
-    
-} returnList;
+extern funcStack* functionStackTarget;
 
 int isFuncStackTargetEmpty();
 void pushFuncStackTarget(symbol* mem);

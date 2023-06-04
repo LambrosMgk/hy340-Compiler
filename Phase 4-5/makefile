@@ -14,7 +14,7 @@ syntax: syntax.y
 	bison -v --yacc --defines --output=syntax.c syntax.y
 
 parser:
-	gcc -o parser scanner.c syntax.c symbol_table.c stack.c quads.c
+	gcc -o parser scanner.c syntax.c symbol_table.c stack.c quads.c constTables.c make_operand.c StackTarget.c
 
 clean:
 	$(RM) syntax.c syntax.h scanner.c syntax.output parser

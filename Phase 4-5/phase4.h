@@ -1,12 +1,9 @@
+#ifndef phase4_h
+#define phase4_h
+
 #include "make_operand.h"
 
-typedef struct instructionToBinary instructionToBinary;
-typedef struct numberToBinary numberToBinary;
-typedef struct stringToBinary stringToBinary;
-typedef struct userFuncToBinary userFuncToBinary;
-typedef struct libFuncToBinary libFuncToBinary;
-
-struct instructionToBinary{
+typedef struct instructionToBinary{
 
 	int instrOpcode;
 	
@@ -21,34 +18,6 @@ struct instructionToBinary{
 
 	int instrLine;
 
-};
+} instructionToBinary;
 
-// struct numberToBinary{
-
-// 	int offset;
-// 	int value;
-	
-// };
-
-// struct stringToBinary{
-
-// 	int offset;
-// 	char* value;
-	
-// };
-
-// struct userFuncToBinary{
-
-// 	int offset;
-// 	int address;
-// 	int localSize;
-// 	char* id;
-	
-// };
-
-// struct libFuncToBinary{
-
-// 	int offset;
-// 	char* value;
-	
-// };
+#endif

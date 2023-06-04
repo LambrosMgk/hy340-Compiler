@@ -27,7 +27,7 @@ void make_operand (expr* e, vmarg* arg)
 		case assignexpr_e:
 		case newtable_e:		
 		{
-			assert(e->sym);
+			assert(e->sym);	/*must have a symbol*/
 			arg->val = e->sym->offset;
 
 			switch(e->sym->space)
@@ -43,27 +43,26 @@ void make_operand (expr* e, vmarg* arg)
 					break;
 				default: assert(0);
 			}
-
 			break;
 		}
 
 		case constbool_e: 		
 		{
-			arg->val = e->boolConst;	//i set an int value from syntax.y
+			arg->val = e->boolConst;	//i've set an int value from syntax.y
 			arg->type = bool_a;
 			break;
 		}
 
 		case conststring_e:		
 		{
-			arg->val = INSERTER_STRING(e->strConst);
+			arg->val = INSERT_STRING(e->strConst);
 			arg->type = string_a;
 			break;
 		}
 
 		case constnum_e:		
 		{			
-			arg->val = INSERTER_NUM(e->numConst);
+			arg->val = INSERT_NUM(e->numConst);
 			arg->type = number_a;
 			break;
 		}
@@ -77,14 +76,14 @@ void make_operand (expr* e, vmarg* arg)
 		case programfunc_e: 	
 		{
 			arg->type = userfunc_a;
-			arg->val = INSERTER_USERFUNC(e->sym->value.funcVal->taddress, e->sym->value.funcVal->totallocals,e->sym->value.funcVal->totalargs, (char*) e->sym->value.funcVal->name);
+			arg->val = INSERT_USERFUNC(e->sym->taddress, e->sym->totallocals,e->sym->totalargs, e->sym->varName);
 			break;
 		}
 
 		case libraryfunc_e:		
 		{
 			arg->type = libfunc_a;
-			arg->val = INSERTER_LIBFUNC((char*) e->sym->value.funcVal->name);
+			arg->val = INSERT_LIBFUNC((char*) e->sym->varName);
 			break;
 		}
 
@@ -95,7 +94,7 @@ void make_operand (expr* e, vmarg* arg)
 
 void make_numberOperand (vmarg *arg, double val)
 {
-	arg->val = INSERTER_NUM(val);
+	arg->val = INSERT_NUM(val);
 	arg->type = number_a;
 }
 
@@ -137,7 +136,7 @@ void generate_TABLEGETELM 	(quad *quadInput){ generate(tablegetelem_v, quadInput
 void generate_TABLESETELEM	(quad *quadInput){ generate(tablesetelem_v, quadInput); }
 void generate_ASSIGN 		(quad *quadInput){ generate(assign_v, quadInput); }
 
-void generate_NOP 			(quad *quadInput)
+void generate_NOP (quad *quadInput)
 {
 	instruction t; 
 
@@ -223,7 +222,7 @@ void generate_GETRETVAL(quad *quadInput)
 void generate_FUNCSTART(quad *quadInput) 
 {
 	symbol* f = quadInput->result->sym;
-	f->value.funcVal->taddress = nextinstructionlabel();
+	f->taddress = nextinstructionlabel();
 	quadInput->taddress = nextinstructionlabel();
 
 	pushFuncStackTarget(f);
@@ -249,12 +248,12 @@ void generate_RETURN(quad *quadInput)
 	t.srcLine = nextinstructionlabel();
 
 	make_retvalOperand(&t.result);
-	make_operand(quadInput->result,&t.arg1);
+	make_operand(quadInput->result, &t.arg1);
 	emitInstr(t);
 
 	symbol* f = topFuncStackTarget();
 	appendFuncStackTarget(f, nextinstructionlabel());
-	assert(f->value.funcVal->returnList);
+	assert(f->returnList);
 
 	setArgsNull(&t);
 	t.srcLine = nextinstructionlabel();
@@ -269,11 +268,11 @@ void generate_FUNCEND(quad *quadInput)
 {
  	symbol* f = popFuncStackTarget();
  	//Backpatch return list
- 	returnList* reader = f->value.funcVal->returnList;
+ 	returnList* reader = f->returnList;
 
  	while(reader != NULL)
 	{
- 		patchInstrLabel(reader->instrLabel,nextinstructionlabel());
+ 		patchInstrLabel(reader->instrLabel, nextinstructionlabel());
  		reader = reader->next;
  	}
 
@@ -343,7 +342,7 @@ void add_incomplete_jump(unsigned int instrNo, unsigned int iaddress)
 
 unsigned int currprocessedquad(void){ return currQuadNo; }
 
-void reset_operand(vmarg *arg){ arg->val = -1 ; }
+void reset_operand(vmarg *arg){ arg->val = -1; }
 
 void setArgsNull(instruction* t)
 {
@@ -365,23 +364,23 @@ generator_func_t generators[] = {
 	generate_MUL,
 	generate_DIV,
 	generate_MOD,
-	generate_JUMP,
 	generate_IF_EQ,
 	generate_IF_NOTEQ,
 	generate_IF_LESSEQ,
 	generate_IF_GREATEREQ,
 	generate_IF_LESS,
 	generate_IF_GREATER,
+	generate_JUMP,
 	generate_CALL,
 	generate_PARAM,
+	generate_RETURN,
+	generate_GETRETVAL,
 	generate_FUNCSTART,
 	generate_FUNCEND,
 	generate_NEWTABLE,
 	generate_TABLEGETELM,
 	generate_TABLESETELEM,
-	generate_GETRETVAL,
-	generate_NOP,
-	generate_RETURN
+	generate_NOP
 
 };
 
@@ -399,9 +398,8 @@ void generateTcode(unsigned int totalQuads)
 	patchIncompleteJumps(totalQuads);
 
 	
-	//PRINTER_STR();printf("\n");
-	//PRINTER_NUM();printf("\n");
-	//PRINTER_USERFUNC();printf("\n");
-	//PRINTER_LIB();printf("\n");
-
+	PRINT_STR();printf("\n");
+	PRINT_NUM();printf("\n");
+	PRINT_USERFUNC();printf("\n");
+	PRINT_LIB();printf("\n");
 }

@@ -1,7 +1,6 @@
 %{
-    #include "symbol_table.h"
-    #include "quads.h"
     #include "stack.h"
+    #include "phase4.h"
 
     int alpha_yylex(void);
     int alpha_yyerror(char *yaccProvidedMessage);
@@ -13,6 +12,7 @@
     int scope = 0, offset = 0;
     int allowReturn = 0;
     int openloops = 0;
+    int totalFuncArgs = 0;
 
      enum scopespace_t getSpace()
     {
@@ -440,7 +440,7 @@ term:   Lparenthesis expr Rparenthesis {
             
             check_for_func_error($2->sym);
 
-            $$ = newexpr(arithexpr_e, newTemp(&offset, getSpace()));
+            $$ = newExpr(arithexpr_e, newTemp(&offset, getSpace()));
             emit(iop_mul, $$, numExpr, $2, nextQuadLabel(), alpha_yylineno);
 
             printMessage("term -> uminus expr");
@@ -957,56 +957,85 @@ funcdef:    FUNCTION ID {
                 sym = addSymbol($2, user_func, scope, alpha_yylineno, offset, getSpace()); 
 
                 push_func($2, scope, nextQuadLabel());
-                offset++;   /*functions count as variables?*/
+                //offset++;   /*functions count as variables?*/
                 offset_push(offset);
                 expr_P expr = newExpr(programfunc_e, sym);
                 
+                sym->iaddress = nextQuadLabel();
                 emit(jump, NULL, NULL, NULL, nextQuadLabel(), alpha_yylineno); /*create empty jump that will later be filled with the end of this function*/
                 emit(funcstart, expr, NULL, NULL, nextQuadLabel(), alpha_yylineno);
 
                 printf("OFFSET BEFORE FUNC %d\n", offset);
                 offset = 0;
             } 
-            Lparenthesis idlist {
-                printf(ANSI_COLOR_GREEN"formal args counter : %d"ANSI_COLOR_RESET"\n", offset);
+            Lparenthesis idlist Rparenthesis {
+                symbol_T sym = getElement($2, scope);
+                if(sym == NULL)
+                {
+                    printf(ANSI_COLOR_RED"Symbol table, could not find function symbol %s, error in line <%d>"ANSI_COLOR_RESET"\n", $2, alpha_yylineno);
+                    exit(-1);
+                }
+                sym->totalargs = totalFuncArgs;
+                totalFuncArgs = 0;
+                printf(ANSI_COLOR_GREEN"formal args counter : %d"ANSI_COLOR_RESET"\n", sym->totalargs);
+                allowReturn++;
+                openloops = 0;
             }
-            Rparenthesis {allowReturn++; openloops = 0;}
             block  {
                 symbol_T sym = getElement($2, scope);
                 expr_P expr = newExpr(programfunc_e, sym);
 
                 stack_T funcStruct = pop_func();
+
                 $$ = expr;
                 emit(funcend, expr, NULL, NULL, nextQuadLabel(), alpha_yylineno);
                 patchLabel(funcStruct->startLabel, nextQuadLabel());
-                allowReturn--;
+
+                sym->totallocals = offset - sym->totalargs; //each time the offset is saved in a stack so i can calculate the locals this way
                 offset_stack_T offsettmp = offset_pop();
-                offset = offsettmp->offset; printf("OFFSET AFTER FUNC %d\n", offset);   //remove this later
+                offset = offsettmp->offset; 
+                allowReturn--;
+                printf("OFFSET AFTER FUNC %d\n", offset);   //remove this later
 
                 printMessage("funcdef -> function id(idlist){stmts}");
             }   |
             FUNCTION {
                 symbol_T sym = add_anonymus_func(scope, alpha_yylineno, offset, getSpace());
 
-                offset++;   /*functions count as variables?*/
+                //offset++;   /*functions count as variables?*/
                 offset_push(offset);
-                allowReturn++;
                 push_func(sym->varName, scope, nextQuadLabel());
                 expr_P expr = newExpr(programfunc_e, sym);
+                
+                sym->iaddress = nextQuadLabel();
                 emit(jump, NULL, NULL, NULL, nextQuadLabel(), alpha_yylineno);
                 emit(funcstart, expr, NULL, NULL, nextQuadLabel(), alpha_yylineno);
                 printf("OFFSET BEFORE FUNC %d\n", offset);
                 
                 offset = 0;
-            } Lparenthesis idlist { printf("formal args for anonymus func counter : %d\n", offset); openloops = 0; } Rparenthesis block {
+            } Lparenthesis idlist Rparenthesis {
+                symbol_T func = getActiveFunctionFromScopeOut(scope);
+                if(func == NULL)
+                {
+                    printf(ANSI_COLOR_RED"Symbol table, could not find anonymus function symbol, error in line <%d>"ANSI_COLOR_RESET"\n", alpha_yylineno);
+                    exit(-1);
+                }
+                func->totalargs = totalFuncArgs;
+                totalFuncArgs = 0;
+                printf(ANSI_COLOR_GREEN"formal args for anonymus func counter : %d"ANSI_COLOR_RESET"\n", func->totalargs);
+                allowReturn++;
+                openloops = 0;
+            } block {
                 symbol_T func = getActiveFunctionFromScopeOut(scope);
                 expr_P expr = newExpr(programfunc_e, func);
                 stack_T funcStruct = pop_func();
                 emit(funcend, expr, NULL, NULL, nextQuadLabel(), alpha_yylineno);
                 patchLabel(funcStruct->startLabel, nextQuadLabel());
                 allowReturn--;
+                func->totallocals = offset - func->totalargs;
                 offset_stack_T offsettmp = offset_pop();
-                offset = offsettmp->offset; printf("OFFSET AFTER FUNC %d\n", offset);
+                offset = offsettmp->offset;
+                printf("OFFSET AFTER FUNC %d\n", offset);   //remove this later
                 
                 $$ = expr;
                 printMessage("funcdef -> function(idlist){}"); 
@@ -1046,7 +1075,8 @@ const:  NUMBER  {
 idlist:     ID  {
                 symbol_T sym = addSymbol($1, func_arg, scope+1, alpha_yylineno, offset, formalArg);
                 offset++;
-
+                totalFuncArgs++;
+                
                 if(sym == NULL)
                 {
                     printf(ANSI_COLOR_RED"Syntax error in line <%d>: argument %s is already declared"ANSI_COLOR_RESET"\n", alpha_yylineno, $1);
@@ -1057,6 +1087,7 @@ idlist:     ID  {
             idlist comma ID {
                 symbol_T sym = addSymbol($3, func_arg, scope+1, alpha_yylineno, offset, formalArg);
                 offset++;
+                totalFuncArgs++;
 
                 if(sym == NULL)
                 {
@@ -1275,6 +1306,121 @@ returnstmt: RETURN Semicolon {
 
 %%
 
+void createBinaryFile(char* customName)
+{
+    FILE *fp;
+
+    if(customName)
+    {
+        fp = fopen(strcat(customName, ".bin"), "wb");
+        if(fp == NULL)
+        {
+            printf("Cannot open file\n");
+            exit(0); 
+        }
+    }
+    else
+    {
+        fp = fopen("AlphaCode.bin","wb");
+        if(fp == NULL)
+        {
+            printf("Cannot open file\n");
+            exit(0); 
+        }
+    }
+
+    int totalGlobalsNo = getTotalGlobals();
+    instructionToBinary instr;
+
+    char* value = NULL;
+    int currStringSize = 0, i = 0;
+
+    unsigned int magicNumber    = 19955991;
+    fwrite(&magicNumber,        sizeof(magicNumber),        1,fp);  // MagicNumber
+    fwrite(&totalNumConsts,     sizeof(totalNumConsts),     1,fp);  // totalNumConsts
+    fwrite(&totalStringConsts,  sizeof(totalStringConsts),  1,fp);  // totalStringConsts
+    fwrite(&totalNamedLibFuncs, sizeof(totalNamedLibFuncs), 1,fp);  // totalNamedLibFuncs 
+    fwrite(&totalUserFuncs,     sizeof(totalUserFuncs),     1,fp);  // totalUserFuncs
+    fwrite(&totalInstructions,  sizeof(totalInstructions),  1,fp);  // totalInstructions
+    fwrite(&totalGlobalsNo,     sizeof(totalGlobalsNo),     1,fp);  // totalGlobals
+
+    // numConsts
+    for(i = 0; i < totalNumConsts; i++)
+    {   
+        fwrite(&i, sizeof(int), 1, fp);                  
+        fwrite(&numConsts[i], sizeof(double), 1, fp);
+    }
+
+    // stringConsts
+    for(i = 0; i < totalStringConsts; i++)
+    {                           
+        currStringSize = strlen(stringConsts[i]) + 1;
+
+        fwrite(&currStringSize, sizeof(int), 1,fp);  
+
+        value = calloc (currStringSize, sizeof(char));
+        strcpy(value, stringConsts[i]); 
+
+        fwrite(&i, sizeof(int), 1,fp);                 
+        fwrite(value, sizeof(char)*currStringSize, 1, fp);                 
+
+        value = NULL;
+    }
+
+    // userFuncs
+    for(i = 0; i < totalUserFuncs; i++)
+    {
+        currStringSize = strlen(userFuncs[i].id)+1; 
+        fwrite(&currStringSize, sizeof(int), 1,fp);            
+
+        value = calloc (currStringSize, sizeof(char)) ;           
+        strcpy(value, userFuncs[i].id);
+        
+        fwrite(&i, sizeof(int), 1,fp);            
+        fwrite(&userFuncs[i].address, sizeof(int), 1,fp);            
+        fwrite(&userFuncs[i].localSize, sizeof(int), 1,fp); 
+        fwrite(&userFuncs[i].totalargs, sizeof(int), 1,fp);
+        fwrite(value, sizeof(char)*currStringSize , 1,fp);            
+
+        value = NULL;
+    }
+
+    // namedLibFuncs
+    for(i = 0; i < totalNamedLibFuncs; i++)
+    {
+        currStringSize = strlen(namedLibFuncs[i])+1;
+        fwrite(&currStringSize,sizeof(int), 1,fp);  
+
+        value = calloc (currStringSize, sizeof(char)) ;           
+        strcpy(value, namedLibFuncs[i]);
+
+        fwrite(&i, sizeof(int), 1,fp);              
+        fwrite(value, sizeof(char)*currStringSize , 1,fp);              
+
+        value  = NULL;
+    }   
+
+    for (i = 0; i < nextinstructionlabel(); i++)
+    {
+        instr.instrOpcode   = instructions[i].opcode;
+        
+        instr.resultType    = instructions[i].result.type;
+        instr.resultOffset  = instructions[i].result.val;
+        
+        instr.arg1Type      = instructions[i].arg1.type;
+        instr.arg1Offset    = instructions[i].arg1.val;
+
+        instr.arg2Type      = instructions[i].arg2.type;
+        instr.arg2Offset    = instructions[i].arg2.val;
+
+        instr.instrLine     = instructions[i].srcLine;
+
+        fwrite(&instr,sizeof(instr),1,fp);
+    }
+    
+    fclose(fp);
+}
+
 int alpha_yyerror(char *yaccProvidedMessage)
 {
     fprintf(stderr, "%s: at line %d, before token: %s\n", yaccProvidedMessage, alpha_yylineno, alpha_yytext);
@@ -1283,7 +1429,25 @@ int alpha_yyerror(char *yaccProvidedMessage)
 
 int main(int argc, char **argv) 
 {
-    if(argc > 1)
+    char *binFileName = NULL;
+
+    if(argc > 2)
+    {
+        if(!(alpha_yyin = fopen(argv[1], "r")))
+        {
+            fprintf(stderr, "Couldn't read from file %s\n", argv[1]);
+            return 1;
+        }
+        
+        binFileName = (char *) malloc(strlen(argv[2]));
+        if(binFileName == NULL)
+        {
+            fprintf(stderr, "Malloc for binary file name failed.\n");
+            exit(-1);
+        }
+        strcpy(binFileName, argv[2]);
+    }
+    else if(argc > 1)
     {
         if(!(alpha_yyin = fopen(argv[1], "r")))
         {
@@ -1297,5 +1461,12 @@ int main(int argc, char **argv)
     init_symbol_table();
 
     yyparse();
+
+    
+    emit(iop_noop, NULL, NULL, NULL, nextQuadLabel(), alpha_yylineno);
+    
+    generateTcode(nextQuadLabel());
+    createBinaryFile(NULL); //i like the default name i have
+
     return 0;
 }

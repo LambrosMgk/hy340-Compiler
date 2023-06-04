@@ -18,13 +18,36 @@ enum SymbolCategory {library_function, global_var, func_arg, local_var, user_fun
 
 enum scopespace_t { programVar, functionLocal, formalArg };
 
+typedef enum UnionType_t { function, variable } unionType;
+
+typedef struct returnList returnList;
+
+struct returnList {
+
+    unsigned int instrLabel;
+    struct returnList* next;
+    
+};
+
 typedef struct symbol_
 {
-    char * varName;
     enum SymbolCategory category;
-    int active, scope, line, offset;
     enum scopespace_t space;
+    int active, offset;
+
+    char *varName;
+    unsigned int scope;
+    unsigned int line;
+    
+    //for function symbols
+    unsigned int totalargs;
+    unsigned int iaddress;
+    unsigned int totallocals;
+    unsigned int taddress;
+    returnList*  returnList;
+
     struct symbol_ *nextSym;
+
 } symbol, *symbol_T;
 
 int is_lib_func(char *funcName);
@@ -44,5 +67,7 @@ symbol_T add_anonymus_func(int scope, int line, int offset, enum scopespace_t sp
 void print_symbol_table();
 
 void hide_in_scope(int scope);
+
+unsigned int getTotalGlobals();
 
 #endif

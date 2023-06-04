@@ -1,5 +1,26 @@
 #include "constTables.h"
 
+int totalNumSize;
+int totalStringSize;
+int totalLibFuncSize;
+int totalUserFuncSize;
+int totalInstrSize;
+
+double*	numConsts;
+unsigned int totalNumConsts;
+
+char** stringConsts;
+unsigned int totalStringConsts;
+
+char** namedLibFuncs;
+unsigned int totalNamedLibFuncs;
+
+userfunc* userFuncs;
+unsigned int totalUserFuncs;
+
+instruction* instructions;
+unsigned int totalInstructions; 
+
 void EXPANDER (TYPER type) 
 {
 	switch(type)
@@ -18,7 +39,7 @@ void EXPANDER (TYPER type)
                 totalNumSize += EXPAND_SIZE;
                 break;
 
-		case STRINGER_T:
+		case STRING_T:
                 assert(totalStringConsts == totalStringSize);
 
                 char** p1 = (char**) malloc (NEW_SIZE_STR);
@@ -32,7 +53,7 @@ void EXPANDER (TYPER type)
                 totalStringSize += EXPAND_SIZE;
                 break;
 
-		case LIBFUNCER_T:
+		case LIBFUNC_T:
                 assert(totalLibFuncSize == totalNamedLibFuncs);
 
                 char** p2 = (char**) malloc (NEW_SIZE_LIBFUNC);
@@ -46,7 +67,7 @@ void EXPANDER (TYPER type)
                 totalLibFuncSize += EXPAND_SIZE;
                 break;
 
-		case USERFUNCER_T:
+		case USERFUNC_T:
                 assert(totalUserFuncs == totalUserFuncSize);
 
                 userfunc* p3 = (userfunc*) malloc (NEW_SIZE_USERFUNC);
@@ -60,7 +81,7 @@ void EXPANDER (TYPER type)
                 totalUserFuncSize += EXPAND_SIZE;
                 break;
 
-		case INSTRUCTER_T:
+		case INSTRUCT_T:
                 assert(totalInstructions == totalInstrSize);
 
                 instruction* p4 = (instruction*) malloc (NEW_SIZE_INSTR_ARR);
@@ -79,7 +100,7 @@ void EXPANDER (TYPER type)
 	}
 }
 
-int INSERTER_NUM (double val) 
+int INSERT_NUM (double val) 
 {
 	int i, position; 
     
@@ -99,33 +120,31 @@ int INSERTER_NUM (double val)
 	numConsts[totalNumConsts++]	= val;
 
 	return position;
-
 }
 
-int INSERTER_STRING (char* val) 
+int INSERT_STRING (char* val) 
 {
 	int i, position; 
 	
 	for(i = 0; i < totalStringConsts; i++)
 	{
-		if(strcmp(stringConsts[i],val) == 0)
+		if(strcmp(stringConsts[i], val) == 0)
 		{
 			return i;
 		} 
 	}
 
 	if (totalStringSize == totalStringConsts)
-		EXPANDER(STRINGER_T); 
+		EXPANDER(STRING_T); 
 
 	position = totalStringConsts;
 
 	stringConsts[totalStringConsts++] = (char*) strdup(val);
 
 	return position;
-
 }
 
-int INSERTER_LIBFUNC (char* val)
+int INSERT_LIBFUNC (char* val)
 {
 	int i = 0, position; 
 	
@@ -138,30 +157,29 @@ int INSERTER_LIBFUNC (char* val)
 	}
 
 	if (totalLibFuncSize == totalNamedLibFuncs)
-		EXPANDER(LIBFUNCER_T); 
+		EXPANDER(LIBFUNC_T); 
 
 	position = totalNamedLibFuncs;
 
 	namedLibFuncs[totalNamedLibFuncs++]	= (char*) strdup(val);
 
 	return position;
-
 }
 
-int INSERTER_USERFUNC (unsigned int address, unsigned int localSize, unsigned int totalargs, char* id)
+int INSERT_USERFUNC (unsigned int address, unsigned int localSize, unsigned int totalargs, char* id)
 {
 	int i, position; 
 
 	for(i = 0; i < totalUserFuncs; i++)
 	{ 
-		if(strcmp(userFuncs[i].id , id) == 0 && userFuncs[i].address == address)
+		if(strcmp(userFuncs[i].id, id) == 0 && userFuncs[i].address == address)
 		{
 			 return i;
 		} 
 	}
 
 	if(totalUserFuncSize == totalUserFuncs)
-		EXPANDER(USERFUNCER_T);
+		EXPANDER(USERFUNC_T);
 
 	position = totalUserFuncs;
 
@@ -179,7 +197,7 @@ int INSERTER_USERFUNC (unsigned int address, unsigned int localSize, unsigned in
 int emitInstr (instruction t)
 {
 	if(totalInstrSize == totalInstructions)
-		EXPANDER(INSTRUCTER_T);
+		EXPANDER(INSTRUCT_T);
 
 	int position = totalInstructions;
 
@@ -194,50 +212,50 @@ int emitInstr (instruction t)
 	return totalInstructions;
 }
 
-void PRINTER_NUM(void)
+void PRINT_NUM(void)
 {
 	int i = 0;
 
 	printf(ANSI_COLOR_RED"PINAKAS ARITHMITIKON STATHERON"ANSI_COLOR_RESET"\n");
 	for(i = 0; i < totalNumConsts; i++)
 	{
-		printf("|%d| %lf\n", i, numConsts[i]);
+		printf("[%d] %lf\n", i, numConsts[i]);
 	}
 	printf("\n");
 } 
 
-void PRINTER_STR(void)
+void PRINT_STR(void)
 {
 	int i = 0;
 
 	printf(ANSI_COLOR_RED"PINAKAS STATHERON STRINGS"ANSI_COLOR_RESET"\n");
 	for(i = 0; i < totalStringConsts; i++)
 	{
-		printf("|%d| %s\n", i, stringConsts[i]);
+		printf("[%d] %s\n", i, stringConsts[i]);
 	}
 	printf("\n");
 }
 
-void PRINTER_USERFUNC(void)
+void PRINT_USERFUNC(void)
 {
 	int i = 0;
 
 	printf(ANSI_COLOR_RED"PINAKAS SUNARTISEWN XRHSTH"ANSI_COLOR_RESET"\n");
 	for(i = 0; i < totalUserFuncs; i++)
 	{
-		printf("|%d| address %d, localSize %d, id %s\n", i, userFuncs[i].address, userFuncs[i].localSize, userFuncs[i].id);
+		printf("[%d] address %d, localSize %d, id %s\n", i, userFuncs[i].address, userFuncs[i].localSize, userFuncs[i].id);
 	}
 	printf("\n");
 }
 
-void PRINTER_LIB(void)
+void PRINT_LIB(void)
 {
 	int i = 0;
 
 	printf(ANSI_COLOR_RED"PINAKAS SUNARTISEWN BIBLIOTHIKIS"ANSI_COLOR_RESET"\n");
 	for(i = 0; i < totalNamedLibFuncs; i++)
 	{
-		printf("|%d| %s\n", i, namedLibFuncs[i]);
+		printf("[%d] %s\n", i, namedLibFuncs[i]);
 	}
 	printf("\n");
 }
