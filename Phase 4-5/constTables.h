@@ -3,7 +3,7 @@
 
 #include "targetCode.h"
 
-#define EXPAND_SIZE 		1024
+#define EXPAND_SIZE 1024
 
 #define CURR_SIZE_NUM (totalNumConsts * sizeof(double))
 #define NEW_SIZE_NUM (EXPAND_SIZE * sizeof(double) + CURR_SIZE_NUM)

@@ -219,8 +219,8 @@ symbol_T addSymbol(char * symbol_name, enum SymbolCategory category, int scope, 
             {
                 if(tmp->active == 1)
                 {
-                    /*printf("symbol %s exists and is already active\n", tmp->varName);*/
-                    return NULL;
+                    printf(ANSI_COLOR_YELLOW"symbol %s exists and is already active"ANSI_COLOR_RESET"\n", tmp->varName);
+                    return tmp; //used to be NULL
                 }
                 /*there is a symbol that has the same category and scope, but we add a new one*/
                 elem = malloc(sizeof(symbol));
@@ -353,6 +353,7 @@ void hide_in_scope(int scope)
     tmp = symbol_table[scope];
     while(tmp != NULL)
     {
+        /*printf("Hiding from scope symbol : %s\n", tmp->varName);*/
         tmp->active = 0;
         tmp = tmp->nextSym;
     }

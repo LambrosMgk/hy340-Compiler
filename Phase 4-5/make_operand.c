@@ -48,7 +48,7 @@ void make_operand (expr* e, vmarg* arg)
 
 		case constbool_e: 		
 		{
-			arg->val = e->boolConst;	//i've set an int value from syntax.y
+			arg->val = e->boolConst;
 			arg->type = bool_a;
 			break;
 		}
@@ -109,7 +109,7 @@ void make_retvalOperand (vmarg *arg)
 	arg->type = retval_a;
 }
 
-// GENERETOR
+
 void generate (vmopcode op, quad *quadInput)
 {
 	instruction t;
@@ -146,9 +146,9 @@ void generate_NOP (quad *quadInput)
 	quadInput->taddress = nextinstructionlabel();
 
 	emitInstr(t); 
-} //arg unused
+}
 
-// GENERETOR RELATIONALATOR
+
 void generate_relational(vmopcode op, quad *quadInput)
 {
 	instruction t;
@@ -161,7 +161,6 @@ void generate_relational(vmopcode op, quad *quadInput)
 	make_operand(quadInput->arg2, &t.arg2);
 
 	t.result.type = label_a;
-
 	if((int)quadInput->result->numConst < currprocessedquad())
 		t.result.val = quads[(int)quadInput->result->numConst].taddress; 
 	else
@@ -284,9 +283,7 @@ void generate_FUNCEND(quad *quadInput)
 		
  	make_operand(quadInput->result, &t.result);
  	emitInstr(t);
- }
-
-// GENERATIONAL FUNCTIONS
+}
 
 void patchInstrLabel(unsigned int instrNo, unsigned int taddress)
 {
@@ -335,9 +332,8 @@ void add_incomplete_jump(unsigned int instrNo, unsigned int iaddress)
 
 	incomplete_jump* p = ij_head + ij_total++;
 
-	p -> instrNo	= 	instrNo;
-	p -> iaddress	= 	iaddress;
-
+	p -> instrNo = instrNo;
+	p -> iaddress = iaddress;
 }
 
 unsigned int currprocessedquad(void){ return currQuadNo; }
@@ -387,14 +383,15 @@ generator_func_t generators[] = {
 void generateTcode(unsigned int totalQuads)
 {
 	int i;
-	for(i = 0; i < totalQuads; ++i)
+	for(i = 0; i < totalQuads; i++)
 	{
-		//printf("quads[%d].op : %d\n",i,quads[i].op );
+		printf("quads[%d].op : %d\n", i, quads[i].op );
 		currQuadNo = i;
 
 		(*generators[quads[i].op])(quads+i);
 	}
 
+	//printf("Patching target IJ...\n");
 	patchIncompleteJumps(totalQuads);
 
 	

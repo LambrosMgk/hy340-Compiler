@@ -12,13 +12,8 @@ typedef struct funcStack funcStack;
 
 enum vmopcode {
 
-	assign_v,		add_v,				sub_v,
-	mul_v,			div_v,				mod_v,
-	jump_v,			jeq_v,				jne_v,
-	jle_v,			jge_v,				jlt_v,
-	jgt_v,			call_v,				pusharg_v,	
-	funcenter_v,	funcexit_v,			newtable_v,
-	tablegetelem_v,	tablesetelem_v, 	nop_v
+	assign_v, add_v, sub_v, mul_v, div_v, mod_v, jump_v, jeq_v, jne_v, jle_v, jge_v, jlt_v, jgt_v,
+	call_v, pusharg_v, funcenter_v, funcexit_v, newtable_v, tablegetelem_v, tablesetelem_v, nop_v
 
 };
 

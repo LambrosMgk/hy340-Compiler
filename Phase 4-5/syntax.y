@@ -104,7 +104,7 @@
 
 
 
-program:    stmts{ printMessage("program -> stmts\n"ANSI_COLOR_GREEN"Accepted!"ANSI_COLOR_RESET); writeQuadsToFile(); print_symbol_table();}
+program:    stmts{ printf("program -> stmts\n"ANSI_COLOR_GREEN"Accepted!"ANSI_COLOR_RESET"\n"); writeQuadsToFile(); print_symbol_table();}
     ;
 
 stmts:  stmts stmt { printMessage("stmts -> statement kleene star"); resetTemp();}
@@ -117,19 +117,19 @@ stmt:   expr Semicolon {
             if($1->type == boolexpr_e)  // maybe add a check if it came from NOT
             {
                 expr_P trueExpr = newExpr(constbool_e, NULL);
-                trueExpr->boolConst = 1;
+                trueExpr->boolConst = '1';
                 expr_P falseExpr = newExpr(constbool_e, NULL);
-                falseExpr->boolConst = 0;
+                falseExpr->boolConst = '0';
                 $1->sym = newTemp(&offset, getSpace());
                 expr_P numExpr = newExpr(constnum_e, NULL);
                 
 
                 backPatchList($1->truelist,nextQuadLabel());
-                emit(iop_assign, $1, trueExpr, NULL, nextQuadLabel(), alpha_yylineno);
+                emit(iop_assign, trueExpr, NULL, $1, nextQuadLabel(), alpha_yylineno);
                 numExpr->numConst = nextQuadLabel()+2;
                 emit(jump, NULL, NULL, numExpr, nextQuadLabel(), alpha_yylineno);
                 backPatchList($1->falselist, nextQuadLabel());
-                emit(iop_assign, $1, falseExpr, NULL, nextQuadLabel(), alpha_yylineno);
+                emit(iop_assign, falseExpr, NULL, $1, nextQuadLabel(), alpha_yylineno);
             } 
             printMessage("stmt -> exp;");
         } |
@@ -177,13 +177,13 @@ expr:   assignexpr { $$ = $1; printMessage("expr -> assignexpr"); } |
             expr_P result = $1; 
             if(result->type == arithexpr_e && result->sym->varName[0] == '_')   /*optimized code, use the same temp var to store the result*/
             {
-                emit(iop_add, result, $1, $3, nextQuadLabel(), alpha_yylineno);
+                emit(iop_add, $1, $3, result, nextQuadLabel(), alpha_yylineno);
             }
             else
             {
                 symbol_T temp = newTemp(&offset, getSpace());   /*gave pointer to offset because i don't know if i'll get a new var or not*/
                 result = newExpr(arithexpr_e, temp);
-                emit(iop_add, result, $1, $3, nextQuadLabel(), alpha_yylineno);
+                emit(iop_add, $1, $3, result, nextQuadLabel(), alpha_yylineno);
             }
             
             $$ = result;
@@ -193,13 +193,13 @@ expr:   assignexpr { $$ = $1; printMessage("expr -> assignexpr"); } |
             expr_P result = $1; 
             if(result->type == arithexpr_e && result->sym->varName[0] == '_')   /*optimized code*/
             {
-                emit(iop_sub, result, $1, $3, nextQuadLabel(), alpha_yylineno);
+                emit(iop_sub, $1, $3, result, nextQuadLabel(), alpha_yylineno);
             }
             else
             {
                 symbol_T temp = newTemp(&offset, getSpace());
                 result = newExpr(arithexpr_e, temp);
-                emit(iop_sub, result, $1, $3, nextQuadLabel(), alpha_yylineno);
+                emit(iop_sub, $1, $3, result, nextQuadLabel(), alpha_yylineno);
             }
             
             $$ = result;
@@ -209,19 +209,19 @@ expr:   assignexpr { $$ = $1; printMessage("expr -> assignexpr"); } |
             symbol_T temp = newTemp(&offset, getSpace());
             expr_P result = newExpr(arithexpr_e, temp);
             $$ = result;
-            emit(iop_mul, result, $1, $3, nextQuadLabel(), alpha_yylineno); printMessage("expr -> expr * expr");
+            emit(iop_mul, $1, $3, result, nextQuadLabel(), alpha_yylineno); printMessage("expr -> expr * expr");
         } |
         expr divide expr {
             symbol_T temp = newTemp(&offset, getSpace());
             expr_P result = newExpr(arithexpr_e, temp);
             $$ = result;
-            emit(iop_div, result, $1, $3, nextQuadLabel(), alpha_yylineno); printMessage("expr -> expr / expr");
+            emit(iop_div, $1, $3, result, nextQuadLabel(), alpha_yylineno); printMessage("expr -> expr / expr");
         } |
         expr mod expr {
             symbol_T temp = newTemp(&offset, getSpace());
             expr_P result = newExpr(arithexpr_e, temp);
             $$ = result;
-            emit(iop_mod, result, $1, $3, nextQuadLabel(), alpha_yylineno); printMessage("expr -> expr % expr");
+            emit(iop_mod, $1, $3, result, nextQuadLabel(), alpha_yylineno); printMessage("expr -> expr % expr");
         } |
         expr greater expr {
             $$ = newExpr(boolexpr_e, NULL);
@@ -260,36 +260,36 @@ expr:   assignexpr { $$ = $1; printMessage("expr -> assignexpr"); } |
             if($1->type == boolexpr_e)
             {
                 expr_P trueExpr = newExpr(constbool_e, NULL);
-                trueExpr->boolConst = 1;
+                trueExpr->boolConst = '1';
                 expr_P falseExpr = newExpr(constbool_e, NULL);
-                falseExpr->boolConst = 0;
+                falseExpr->boolConst = '0';
                 expr_P numExpr = newExpr(constnum_e, NULL);
                 $1->sym = newTemp(&offset, getSpace());
 
                 backPatchList($1->truelist, nextQuadLabel());
-                emit(iop_assign, $1, trueExpr, NULL, nextQuadLabel(), alpha_yylineno);
+                emit(iop_assign, trueExpr, NULL, $1, nextQuadLabel(), alpha_yylineno);
                 numExpr->numConst = nextQuadLabel()+2;
                 emit(jump, NULL, NULL, numExpr, nextQuadLabel(), alpha_yylineno);
                 backPatchList($1->falselist, nextQuadLabel());
-                emit(iop_assign, $1, falseExpr,NULL, nextQuadLabel(), alpha_yylineno);
+                emit(iop_assign, falseExpr, NULL, $1, nextQuadLabel(), alpha_yylineno);
             }
         } expr {
 
             if($4->type == boolexpr_e)
             {
                 expr_P trueExpr = newExpr(constbool_e, NULL);
-                trueExpr->boolConst = 1;
+                trueExpr->boolConst = '1';
                 expr_P falseExpr = newExpr(constbool_e, NULL);
-                falseExpr->boolConst = 0;
+                falseExpr->boolConst = '0';
                 expr_P numExpr = newExpr(constnum_e, NULL);
 
                 $4->sym = newTemp(&offset, getSpace());
                 backPatchList($4->truelist, nextQuadLabel());
-                emit(iop_assign, $4, trueExpr, NULL, nextQuadLabel(), alpha_yylineno);
+                emit(iop_assign, trueExpr, NULL, $4, nextQuadLabel(), alpha_yylineno);
                 numExpr->numConst = nextQuadLabel()+2;
                 emit(jump, NULL, NULL, numExpr, nextQuadLabel(), alpha_yylineno);
                 backPatchList($4->falselist,nextQuadLabel());
-                emit(iop_assign, $4, falseExpr, NULL, nextQuadLabel(), alpha_yylineno);
+                emit(iop_assign, falseExpr, NULL, $4, nextQuadLabel(), alpha_yylineno);
             }
 
             $$ = newExpr(boolexpr_e, NULL);
@@ -304,18 +304,18 @@ expr:   assignexpr { $$ = $1; printMessage("expr -> assignexpr"); } |
             if($1->type == boolexpr_e)
             {
                 expr_P trueExpr = newExpr(constbool_e, NULL);
-                trueExpr->boolConst = 1;
+                trueExpr->boolConst = '1';
                 expr_P falseExpr = newExpr(constbool_e, NULL);
-                falseExpr->boolConst = 0;
+                falseExpr->boolConst = '0';
                 expr_P numExpr = newExpr(constnum_e, NULL);
                 $1->sym = newTemp(&offset, getSpace());
 
                 backPatchList($1->truelist, nextQuadLabel());
-                emit(iop_assign, $1, trueExpr, NULL, nextQuadLabel(), alpha_yylineno);
+                emit(iop_assign, trueExpr, NULL, $1, nextQuadLabel(), alpha_yylineno);
                 numExpr->numConst = nextQuadLabel()+2;
                 emit(jump, NULL, NULL, numExpr, nextQuadLabel(), alpha_yylineno);
                 backPatchList($1->falselist, nextQuadLabel());
-                emit(iop_assign, $1, falseExpr, NULL, nextQuadLabel(), alpha_yylineno);
+                emit(iop_assign, falseExpr, NULL, $1, nextQuadLabel(), alpha_yylineno);
             }
 
         } expr {
@@ -323,19 +323,19 @@ expr:   assignexpr { $$ = $1; printMessage("expr -> assignexpr"); } |
             if($4->type == boolexpr_e)
             {
                 expr_P trueExpr = newExpr(constbool_e, NULL);
-                trueExpr->boolConst = 1;
+                trueExpr->boolConst = '1';
                 expr_P falseExpr = newExpr(constbool_e, NULL);
-                falseExpr->boolConst = 0;
+                falseExpr->boolConst = '0';
                 expr_P numExpr = newExpr(constnum_e, NULL);
 
                 $4->sym = newTemp(&offset, getSpace());
 
                 backPatchList($4->truelist, nextQuadLabel());
-                emit(iop_assign, $4, trueExpr, NULL, nextQuadLabel(), alpha_yylineno);
+                emit(iop_assign, trueExpr, NULL, $4, nextQuadLabel(), alpha_yylineno);
                 numExpr->numConst = nextQuadLabel()+2;
                 emit(jump, NULL, NULL, numExpr, nextQuadLabel(), alpha_yylineno);
                 backPatchList($4->falselist, nextQuadLabel());
-                emit(iop_assign, $4, falseExpr, NULL, nextQuadLabel(), alpha_yylineno);
+                emit(iop_assign, falseExpr, NULL, $4, nextQuadLabel(), alpha_yylineno);
             }
 
             $$ = newExpr(boolexpr_e, NULL);
@@ -350,11 +350,11 @@ expr:   assignexpr { $$ = $1; printMessage("expr -> assignexpr"); } |
         expr AND {
             if($1->type != boolexpr_e)
             {
-                expr_P bool_expr = newExpr(boolexpr_e, NULL);
-                bool_expr->boolConst = 1;
+                expr_P bool_expr = newExpr(constbool_e, NULL);
+                bool_expr->boolConst = '1';
                 $1->truelist = makelist(nextQuadLabel());
                 $1->falselist = makelist(nextQuadLabel()+1);
-                emit(if_eq, $1, bool_expr, NULL, nextQuadLabel(), alpha_yylineno);
+                emit(if_eq, bool_expr, $1, NULL, nextQuadLabel(), alpha_yylineno);
                 emit(jump, NULL, NULL, NULL, nextQuadLabel(), alpha_yylineno);
 
                 backPatchList($1->truelist, nextQuadLabel());
@@ -369,10 +369,10 @@ expr:   assignexpr { $$ = $1; printMessage("expr -> assignexpr"); } |
         if($5->type != boolexpr_e)
         {
             expr_P bool_expr = newExpr(constbool_e, NULL);
-            bool_expr->boolConst = 1;
+            bool_expr->boolConst = '1';
             $5->truelist = makelist(nextQuadLabel());
             $5->falselist = makelist(nextQuadLabel()+1);
-            emit(if_eq, $5, bool_expr, NULL, nextQuadLabel(), alpha_yylineno);
+            emit(if_eq, bool_expr, $5, NULL, nextQuadLabel(), alpha_yylineno);
             emit(jump, NULL, NULL, NULL, nextQuadLabel(), alpha_yylineno);
         }
         
@@ -390,11 +390,11 @@ expr:   assignexpr { $$ = $1; printMessage("expr -> assignexpr"); } |
     expr OR { 
             if($1->type != boolexpr_e)
             {
-                expr_P bool_expr = newExpr(boolexpr_e, NULL);
-                bool_expr->boolConst = 1;
+                expr_P bool_expr = newExpr(constbool_e, NULL);
+                bool_expr->boolConst = '1';
                 $1->truelist = makelist(nextQuadLabel());
                 $1->falselist = makelist(nextQuadLabel()+1);
-                emit(if_eq, $1, bool_expr, NULL, nextQuadLabel(), alpha_yylineno);
+                emit(if_eq, bool_expr, $1, NULL, nextQuadLabel(), alpha_yylineno);
                 emit(jump, NULL, NULL, NULL, nextQuadLabel(), alpha_yylineno);
 
                 backPatchList($1->falselist, nextQuadLabel());
@@ -406,11 +406,11 @@ expr:   assignexpr { $$ = $1; printMessage("expr -> assignexpr"); } |
 
         //typecheck for arguments that are not boolean and create logic lists for them
         if($5->type != boolexpr_e){
-            expr_P bool_expr = newExpr(boolexpr_e, NULL);
-            bool_expr->boolConst = 1;
+            expr_P bool_expr = newExpr(constbool_e, NULL);
+            bool_expr->boolConst = '1';
             $5->truelist   = makelist(nextQuadLabel());
             $5->falselist  = makelist(nextQuadLabel()+1);
-            emit(if_eq, $5, bool_expr, NULL, nextQuadLabel(), alpha_yylineno);
+            emit(if_eq, bool_expr, $5, NULL, nextQuadLabel(), alpha_yylineno);
             emit(jump, NULL, NULL, NULL, nextQuadLabel(), alpha_yylineno);
         }
 
@@ -441,7 +441,7 @@ term:   Lparenthesis expr Rparenthesis {
             check_for_func_error($2->sym);
 
             $$ = newExpr(arithexpr_e, newTemp(&offset, getSpace()));
-            emit(iop_mul, $$, numExpr, $2, nextQuadLabel(), alpha_yylineno);
+            emit(iop_mul, numExpr, $2, $$, nextQuadLabel(), alpha_yylineno);
 
             printMessage("term -> uminus expr");
         } |
@@ -452,10 +452,10 @@ term:   Lparenthesis expr Rparenthesis {
             if($2->type != boolexpr_e)
             {
                 expr_P trueExpr = newExpr(constbool_e, NULL);
-                trueExpr->boolConst = 1;
+                trueExpr->boolConst = '1';
                 $$->truelist = makelist(nextQuadLabel()+1);
                 $$->falselist = makelist(nextQuadLabel());
-                emit(if_eq, $2, trueExpr, NULL, nextQuadLabel(), alpha_yylineno);
+                emit(if_eq, trueExpr, $2, NULL, nextQuadLabel(), alpha_yylineno);
                 emit(jump, NULL, NULL, NULL, nextQuadLabel(), alpha_yylineno);
             }
             else
@@ -476,7 +476,7 @@ term:   Lparenthesis expr Rparenthesis {
             if($2->type == tableitem_e)
             {
                 expr_P result = newExpr(var_e, newTemp(&offset, getSpace()));
-                emit(tablegetelem, result, $2, $2->index, nextQuadLabel(), alpha_yylineno);
+                emit(tablegetelem, $2, $2->index, result, nextQuadLabel(), alpha_yylineno);
                 $$ = result;
 
                 emit(iop_add, $$, numExpr, $$, nextQuadLabel(), alpha_yylineno);
@@ -486,7 +486,7 @@ term:   Lparenthesis expr Rparenthesis {
             {
                 emit(iop_add, $2, numExpr, $2, nextQuadLabel(), alpha_yylineno);
                 $$ = newExpr(arithexpr_e, newTemp(&offset, getSpace()));
-                emit(iop_assign, $$, $2, NULL, nextQuadLabel(), alpha_yylineno);
+                emit(iop_assign, $2, NULL, $$, nextQuadLabel(), alpha_yylineno);
             }
 
             printMessage("term -> ++lvalue");
@@ -501,15 +501,15 @@ term:   Lparenthesis expr Rparenthesis {
             if($1->type == tableitem_e)
             {
                 expr_P value = newExpr(var_e, newTemp(&offset, getSpace()));
-                emit(tablegetelem, value, $1, $1->index, nextQuadLabel(), alpha_yylineno);
+                emit(tablegetelem, $1, $1->index, value, nextQuadLabel(), alpha_yylineno);
 
-                emit(iop_assign, $$, value, NULL, nextQuadLabel(), alpha_yylineno);
+                emit(iop_assign, value, NULL, $$, nextQuadLabel(), alpha_yylineno);
                 emit(iop_add, value, numExpr, value, nextQuadLabel(), alpha_yylineno);
                 emit(tablesetelem, $1, $1->index, value, nextQuadLabel(), alpha_yylineno);
             }
             else
             {
-                emit(iop_assign, $$, $1, NULL, nextQuadLabel(), alpha_yylineno); /*assign old value to a temp, post increment*/
+                emit(iop_assign, $1, NULL, $$, nextQuadLabel(), alpha_yylineno); /*assign old value to a temp, post increment*/
                 emit(iop_add, $1, numExpr, $1, nextQuadLabel(), alpha_yylineno);
             }
 
@@ -525,7 +525,7 @@ term:   Lparenthesis expr Rparenthesis {
             if($2->type == tableitem_e)
             {
                 expr_P value = newExpr(var_e, newTemp(&offset, getSpace()));
-                emit(tablegetelem, value, $2, $2->index, nextQuadLabel(), alpha_yylineno);
+                emit(tablegetelem, $2, $2->index, value, nextQuadLabel(), alpha_yylineno);
                 $$ = value;
 
                 emit(iop_sub, $$, numExpr, $$, nextQuadLabel(), alpha_yylineno);
@@ -535,7 +535,7 @@ term:   Lparenthesis expr Rparenthesis {
             {
                 emit(iop_sub, $2, numExpr, $2, nextQuadLabel(), alpha_yylineno); /*pre decrement*/
                 $$ = newExpr(arithexpr_e, newTemp(&offset, getSpace()));
-                emit(iop_assign, $$, $2, NULL, nextQuadLabel(), alpha_yylineno);
+                emit(iop_assign, $2, NULL, $$, nextQuadLabel(), alpha_yylineno);
             }
 
             printMessage("term -> --lvalue");
@@ -551,16 +551,16 @@ term:   Lparenthesis expr Rparenthesis {
             if($1->type == tableitem_e)
             {
                 expr_P value = newExpr(var_e, newTemp(&offset, getSpace()));
-                emit(tablegetelem, value, $1, $1->index, nextQuadLabel(), alpha_yylineno);
+                emit(tablegetelem, $1, $1->index, value, nextQuadLabel(), alpha_yylineno);
 
-                emit(iop_assign, $$, value, NULL, nextQuadLabel(), alpha_yylineno);
-                emit(iop_sub, value, value, numExpr, nextQuadLabel(), alpha_yylineno);
+                emit(iop_assign, value, NULL, $$, nextQuadLabel(), alpha_yylineno);
+                emit(iop_sub, value, numExpr, value, nextQuadLabel(), alpha_yylineno);
                 emit(tablesetelem, $1, $1->index, value, nextQuadLabel(), alpha_yylineno);
             }
             else
             { 
-                emit(iop_assign, $$, $1, NULL, nextQuadLabel(), alpha_yylineno); /*assign old value to a temp, post decrement*/
-                emit(iop_sub, $1, numExpr,$1,nextQuadLabel(), alpha_yylineno);
+                emit(iop_assign, $1, NULL, $$, nextQuadLabel(), alpha_yylineno); /*assign old value to a temp, post decrement*/
+                emit(iop_sub, $1, numExpr, $1, nextQuadLabel(), alpha_yylineno);
             }
 
             printMessage("term -> lvalue--");
@@ -571,9 +571,9 @@ term:   Lparenthesis expr Rparenthesis {
 assignexpr:     lvalue assign expr  {
 
             expr_P trueExpr = newExpr(constbool_e, NULL);
-            trueExpr->boolConst = 1;
+            trueExpr->boolConst = '1';
             expr_P falseExpr = newExpr(constbool_e, NULL);
-            falseExpr->boolConst = 0;
+            falseExpr->boolConst = '0';
 
             check_for_func_error($1->sym);
 
@@ -584,12 +584,12 @@ assignexpr:     lvalue assign expr  {
                 $3->sym = newTemp(&offset, getSpace());
                 
                 backPatchList($3->truelist, nextQuadLabel());
-                emit(iop_assign, $3, trueExpr, NULL, nextQuadLabel(), alpha_yylineno);
+                emit(iop_assign, trueExpr, NULL, $3, nextQuadLabel(), alpha_yylineno);
 
                 numExpr->numConst = nextQuadLabel()+2;
                 emit(jump, NULL, NULL, numExpr, nextQuadLabel(), alpha_yylineno);
                 backPatchList($3->falselist, nextQuadLabel());
-                emit(iop_assign, $3, falseExpr, NULL, nextQuadLabel(), alpha_yylineno);
+                emit(iop_assign, falseExpr, NULL, $3, nextQuadLabel(), alpha_yylineno);
             }
 
             if($1->type == tableitem_e)
@@ -600,20 +600,18 @@ assignexpr:     lvalue assign expr  {
                 if($1->type == tableitem_e)
                 {
                     lvalue = newExpr(var_e, newTemp(&offset, getSpace()));
-                    emit(tablegetelem, lvalue, $1, $1->index, nextQuadLabel(), alpha_yylineno);
+                    emit(tablegetelem, $1, $1->index, lvalue, nextQuadLabel(), alpha_yylineno);
                 }
                 $$ = lvalue;
                 $$->type = assignexpr_e;
             }
             else
             {
-                //maybe create a new expr? $1 = newExpr(var_e, $1->sym);  
-                //l-value ($1) shouldn't be anything else that var_e (unless im forgetting something)
-                emit(iop_assign, $1, $3, NULL, nextQuadLabel(), alpha_yylineno);
+                $1 = newExpr(var_e, $1->sym);
+                emit(iop_assign, $3, NULL, $1, nextQuadLabel(), alpha_yylineno);
 
-                $$ = newExpr(assignexpr_e, NULL);
-                $$->sym = newTemp(&offset, getSpace());
-                emit(iop_assign, $$, $1, NULL, nextQuadLabel(), alpha_yylineno);
+                $$ = newExpr(assignexpr_e, newTemp(&offset, getSpace()));
+                emit(iop_assign, $1, NULL, $$, nextQuadLabel(), alpha_yylineno);
             }
 
             
@@ -624,7 +622,7 @@ primary:    lvalue  {
                 if($1->type == tableitem_e)
                 {
                     $$ = newExpr(var_e, newTemp(&offset, getSpace()));
-                    emit(tablegetelem, $$, $1, $1->index, nextQuadLabel(), alpha_yylineno);
+                    emit(tablegetelem, $1, $1->index, $$, nextQuadLabel(), alpha_yylineno);
                 }
                 else
                     $$ = $1;
@@ -719,7 +717,7 @@ member:     lvalue dot ID   {
                 {
                     lvalue = newExpr(var_e, NULL);
                     lvalue->sym = newTemp(&offset, getSpace());
-                    emit(tablegetelem, lvalue, $1, $1->index, nextQuadLabel(), alpha_yylineno);
+                    emit(tablegetelem, $1, $1->index, lvalue, nextQuadLabel(), alpha_yylineno);
                 }
                 
                 $$ = newExpr(tableitem_e, NULL);
@@ -733,19 +731,19 @@ member:     lvalue dot ID   {
                  if($3->type == boolexpr_e)
                  {
                     expr_P trueExpr = newExpr(constbool_e, NULL);
-                    trueExpr->boolConst = 1;
+                    trueExpr->boolConst = '1';
                     expr_P falseExpr = newExpr(constbool_e, NULL);
-                    falseExpr->boolConst = 0;
+                    falseExpr->boolConst = '0';
                     expr_P numExpr = newExpr(constnum_e, NULL);
 
                     $3->sym = newTemp(&offset, getSpace());
                     
                     backPatchList($3->truelist, nextQuadLabel());
-                    emit(iop_assign, $3, trueExpr, NULL, nextQuadLabel(), alpha_yylineno);
+                    emit(iop_assign, trueExpr, NULL, $3, nextQuadLabel(), alpha_yylineno);
                     numExpr->numConst = nextQuadLabel()+2;
                     emit(jump, NULL, NULL, numExpr, nextQuadLabel(), alpha_yylineno);
                     backPatchList($3->falselist, nextQuadLabel());
-                    emit(iop_assign, $3, falseExpr, NULL, nextQuadLabel(), alpha_yylineno);
+                    emit(iop_assign, falseExpr, NULL, $3, nextQuadLabel(), alpha_yylineno);
                 }
 
                 expr* lvalue = $1;
@@ -753,7 +751,7 @@ member:     lvalue dot ID   {
                 if($1->type == tableitem_e)
                 {
                     lvalue = newExpr(var_e, newTemp(&offset, getSpace()));
-                    emit(tablegetelem, lvalue, $1, $1->index, nextQuadLabel(), alpha_yylineno);
+                    emit(tablegetelem, $1, $1->index, lvalue, nextQuadLabel(), alpha_yylineno);
                 }
 
                 $$ = newExpr(tableitem_e, NULL);
@@ -786,7 +784,7 @@ call:       call Lparenthesis elist Rparenthesis    {
                     if(func->type == tableitem_e)
                     {
                         result = newExpr(var_e, newTemp(&offset, getSpace()));
-                        emit(tablegetelem, result, func, func->index, nextQuadLabel(), alpha_yylineno);
+                        emit(tablegetelem, func, func->index, result, nextQuadLabel(), alpha_yylineno);
                     }
 
                     memberItem = newExpr(tableitem_e, result->sym);
@@ -798,7 +796,7 @@ call:       call Lparenthesis elist Rparenthesis    {
                     if(memberItem->type == tableitem_e)
                     {
                         $1 = newExpr(var_e, newTemp(&offset, getSpace()));
-                        emit(tablegetelem, $1, memberItem, memberItem->index, nextQuadLabel(), alpha_yylineno);
+                        emit(tablegetelem, memberItem, memberItem->index, $1, nextQuadLabel(), alpha_yylineno);
                     }
 
 
@@ -857,10 +855,48 @@ methodcall: dotdot ID Lparenthesis elist Rparenthesis   {
     ;
 
 elist: expr { 
+        if($1->type == boolexpr_e)
+        {
+            expr_P trueExpr = newExpr(constbool_e, NULL);
+            trueExpr->boolConst = '1';
+            expr_P falseExpr = newExpr(constbool_e, NULL);
+            falseExpr->boolConst = '0';
+            expr_P numExpr = newExpr(constnum_e, NULL);
+
+            $1->sym = newTemp(&offset, getSpace());
+            
+            backPatchList($1->truelist, nextQuadLabel());
+            emit(iop_assign, trueExpr, NULL, $1, nextQuadLabel(), alpha_yylineno);
+
+            numExpr->numConst = nextQuadLabel()+2;
+            emit(jump, NULL, NULL, numExpr, nextQuadLabel(), alpha_yylineno);
+            backPatchList($1->falselist, nextQuadLabel());
+            emit(iop_assign, falseExpr, NULL, $1, nextQuadLabel(), alpha_yylineno);         
+        }
+
         $$ = $1; 
         printMessage("elist -> expr"); 
     }   |
         elist comma expr    {
+            if($3->type == boolexpr_e)
+            {
+                expr_P trueExpr = newExpr(constbool_e, NULL);
+                trueExpr->boolConst = '1';
+                expr_P falseExpr = newExpr(constbool_e, NULL);
+                falseExpr->boolConst = '0';
+                expr_P numExpr = newExpr(constnum_e, NULL);
+
+                $3->sym = newTemp(&offset, getSpace());
+                
+                backPatchList($3->truelist, nextQuadLabel());
+                emit(iop_assign, trueExpr, NULL, $3, nextQuadLabel(), alpha_yylineno);
+
+                numExpr->numConst = nextQuadLabel()+2;
+                emit(jump, NULL, NULL, numExpr, nextQuadLabel(), alpha_yylineno);
+                backPatchList($3->falselist, nextQuadLabel());
+                emit(iop_assign, falseExpr, NULL, $3, nextQuadLabel(), alpha_yylineno); 
+            }
+
             expr_P tmp = $1;
             while(tmp->next != NULL)    /*go to the end of the list*/
             {
@@ -879,7 +915,7 @@ objectdef:  LSquareBracket elist RSquareBracket {
             
             exprPtr = newExpr(newtable_e, NULL);
             exprPtr->sym = newTemp(&offset, getSpace());
-            emit(tablecreate, exprPtr, NULL, NULL, nextQuadLabel(), alpha_yylineno);
+            emit(tablecreate, NULL, NULL, exprPtr, nextQuadLabel(), alpha_yylineno);
             for (int i = 0; tmp != NULL; tmp = tmp->next)
             {
                 tableItemexpr = newExpr(constnum_e, NULL);
@@ -894,7 +930,7 @@ objectdef:  LSquareBracket elist RSquareBracket {
             
             exprPtr = newExpr(newtable_e, NULL);
             exprPtr->sym = newTemp(&offset, getSpace());
-            emit(tablecreate, exprPtr, NULL, NULL, nextQuadLabel(), alpha_yylineno);
+            emit(tablecreate, NULL, NULL, exprPtr, nextQuadLabel(), alpha_yylineno);
             for (int i = 0; tmp != NULL; tmp = tmp->next)
             {
                 emit(tablesetelem, exprPtr, tmp->index, tmp->indexedVal, nextQuadLabel(), alpha_yylineno);
@@ -922,19 +958,19 @@ indexedelem:    LCurlyBracket expr colon expr RCurlyBracket {
                  if($4->type == boolexpr_e)
                  {
                     expr_P trueExpr = newExpr(constbool_e, NULL);
-                    trueExpr->boolConst = 1;
+                    trueExpr->boolConst = '1';
                     expr_P falseExpr = newExpr(constbool_e, NULL);
-                    falseExpr->boolConst = 0;
+                    falseExpr->boolConst = '0';
                     expr_P numExpr = newExpr(constnum_e, NULL);
 
                     $4->sym = newTemp(&offset, getSpace());;
                     
                     backPatchList($4->truelist, nextQuadLabel());
-                    emit(iop_assign, $4, trueExpr, NULL, nextQuadLabel(), alpha_yylineno);
+                    emit(iop_assign, trueExpr, NULL, $4, nextQuadLabel(), alpha_yylineno);
                     numExpr->numConst = nextQuadLabel() + 2;
                     emit(jump, NULL, NULL, numExpr, nextQuadLabel(), alpha_yylineno);
                     backPatchList($4->falselist, nextQuadLabel());
-                    emit(iop_assign, $4, falseExpr, NULL, nextQuadLabel(), alpha_yylineno);
+                    emit(iop_assign, falseExpr, NULL, $4, nextQuadLabel(), alpha_yylineno);
                 }
 
                 $$ = newExpr(tableitem_e, NULL);
@@ -955,15 +991,15 @@ funcdef:    FUNCTION ID {
                     exit(-1);
                 }
                 sym = addSymbol($2, user_func, scope, alpha_yylineno, offset, getSpace()); 
+                //offset++;   /*functions count as variables?*/
 
                 push_func($2, scope, nextQuadLabel());
-                //offset++;   /*functions count as variables?*/
                 offset_push(offset);
                 expr_P expr = newExpr(programfunc_e, sym);
                 
                 sym->iaddress = nextQuadLabel();
                 emit(jump, NULL, NULL, NULL, nextQuadLabel(), alpha_yylineno); /*create empty jump that will later be filled with the end of this function*/
-                emit(funcstart, expr, NULL, NULL, nextQuadLabel(), alpha_yylineno);
+                emit(funcstart, NULL, NULL, expr, nextQuadLabel(), alpha_yylineno);
 
                 printf("OFFSET BEFORE FUNC %d\n", offset);
                 offset = 0;
@@ -988,7 +1024,7 @@ funcdef:    FUNCTION ID {
                 stack_T funcStruct = pop_func();
 
                 $$ = expr;
-                emit(funcend, expr, NULL, NULL, nextQuadLabel(), alpha_yylineno);
+                emit(funcend, NULL, NULL, expr, nextQuadLabel(), alpha_yylineno);
                 patchLabel(funcStruct->startLabel, nextQuadLabel());
 
                 sym->totallocals = offset - sym->totalargs; //each time the offset is saved in a stack so i can calculate the locals this way
@@ -1009,7 +1045,7 @@ funcdef:    FUNCTION ID {
                 
                 sym->iaddress = nextQuadLabel();
                 emit(jump, NULL, NULL, NULL, nextQuadLabel(), alpha_yylineno);
-                emit(funcstart, expr, NULL, NULL, nextQuadLabel(), alpha_yylineno);
+                emit(funcstart, NULL, NULL, expr, nextQuadLabel(), alpha_yylineno);
                 printf("OFFSET BEFORE FUNC %d\n", offset);
                 
                 offset = 0;
@@ -1029,7 +1065,7 @@ funcdef:    FUNCTION ID {
                 symbol_T func = getActiveFunctionFromScopeOut(scope);
                 expr_P expr = newExpr(programfunc_e, func);
                 stack_T funcStruct = pop_func();
-                emit(funcend, expr, NULL, NULL, nextQuadLabel(), alpha_yylineno);
+                emit(funcend, NULL, NULL, expr, nextQuadLabel(), alpha_yylineno);
                 patchLabel(funcStruct->startLabel, nextQuadLabel());
                 allowReturn--;
                 func->totallocals = offset - func->totalargs;
@@ -1061,13 +1097,13 @@ const:  NUMBER  {
         }    |
         TRUE    {
             expr_P expr = newExpr(constbool_e, NULL);
-            expr->boolConst = 1;
+            expr->boolConst = '1';
             $$ = expr;
             printMessage("const -> true");
         }    |
         FALSE   {
             expr_P expr = newExpr(constbool_e, NULL);
-            expr->boolConst = 0;
+            expr->boolConst = '0';
             $$ = expr;
             printMessage("const -> false"); }     
     ;
@@ -1103,7 +1139,7 @@ idlist:     ID  {
 ifstmtprefix:   IF Lparenthesis expr Rparenthesis 
                 {
                     expr_P trueExpr = newExpr(constbool_e, NULL);
-                    trueExpr->boolConst = 1;
+                    trueExpr->boolConst = '1';
                     
                     expr_P numExpr = newExpr(constnum_e, NULL);
                     
@@ -1113,11 +1149,11 @@ ifstmtprefix:   IF Lparenthesis expr Rparenthesis
                         $3->sym = newTemp(&offset, getSpace());
                         
                         expr_P falseExpr = newExpr(constbool_e, NULL);
-                        falseExpr->boolConst = 0;
+                        falseExpr->boolConst = '0';
                         
                         backPatchList($3->truelist, nextQuadLabel());
 
-                        emit(iop_assign, $3, trueExpr, NULL, nextQuadLabel(), alpha_yylineno);
+                        emit(iop_assign, trueExpr, NULL, $3, nextQuadLabel(), alpha_yylineno);
                         numExpr->numConst = nextQuadLabel() + 2;
                         emit(jump, NULL, NULL, numExpr, nextQuadLabel(), alpha_yylineno);
 
@@ -1127,7 +1163,7 @@ ifstmtprefix:   IF Lparenthesis expr Rparenthesis
                     }
 
                     numExpr->numConst = nextQuadLabel() + 2;
-                    emit(if_eq, $3, trueExpr, numExpr, nextQuadLabel(), alpha_yylineno);
+                    emit(if_eq, trueExpr, $3, numExpr, nextQuadLabel(), alpha_yylineno);
                     $$ = nextQuadLabel();
                     emit(jump, NULL, NULL, NULL, nextQuadLabel(), alpha_yylineno);
                     printMessage("ifstmtprefix -> if(expr)");
@@ -1175,25 +1211,25 @@ whilestart:     WHILE   {
 
 whilecond:      Lparenthesis expr Rparenthesis   {
                     expr_P trueExpr = newExpr(constbool_e, NULL);
-                    trueExpr->boolConst = 1;
+                    trueExpr->boolConst = '1';
                     expr_P numExpr2 = newExpr(constnum_e, NULL);
 
                     if($2->type == boolexpr_e)
                     {
                         expr_P numExpr = newExpr(constnum_e, NULL);
                         expr_P falseExpr = newExpr(constbool_e, NULL);
-                        falseExpr->boolConst = 0;
+                        falseExpr->boolConst = '0';
                         $2->sym = newTemp(&offset, getSpace());
                         
                         backPatchList($2->truelist, nextQuadLabel());
 
-                        emit(iop_assign, $2, trueExpr, NULL, nextQuadLabel(), alpha_yylineno);
+                        emit(iop_assign, trueExpr, NULL, $2, nextQuadLabel(), alpha_yylineno);
                         numExpr->numConst = nextQuadLabel()+2;
                         emit(jump, NULL, NULL, numExpr, nextQuadLabel(), alpha_yylineno);
 
                         backPatchList($2->falselist, nextQuadLabel());
 
-                        emit(iop_assign, $2, falseExpr, NULL, nextQuadLabel(), alpha_yylineno); 
+                        emit(iop_assign, falseExpr, NULL, $2, nextQuadLabel(), alpha_yylineno); 
                     }
 
                     numExpr2->numConst = nextQuadLabel()+2;
@@ -1231,20 +1267,20 @@ N: { $$ = nextQuadLabel(); emit(jump, NULL, NULL, NULL, nextQuadLabel(), alpha_y
 
 forprefix:  FOR Lparenthesis elist M Semicolon expr Semicolon { 
                 expr_P trueExpr = newExpr(constbool_e, NULL);
-                trueExpr->boolConst = 1;
+                trueExpr->boolConst = '1';
                 if($6->type == boolexpr_e)
                 {
                     expr_P numExpr = newExpr(constnum_e, NULL);
                     expr_P falseExpr = newExpr(constbool_e, NULL);
-                    falseExpr->boolConst = 0;
+                    falseExpr->boolConst = '0';
                     $6->sym = newTemp(&offset, getSpace());
                     
                     backPatchList($6->truelist, nextQuadLabel());
-                    emit(iop_assign, $6, trueExpr, NULL, nextQuadLabel(), alpha_yylineno);
+                    emit(iop_assign, trueExpr, NULL, $6, nextQuadLabel(), alpha_yylineno);
                     numExpr->numConst = nextQuadLabel()+2;
                     emit(jump, NULL, NULL, numExpr, nextQuadLabel(), alpha_yylineno);
                     backPatchList($6->falselist, nextQuadLabel());
-                    emit(iop_assign, $6, falseExpr, NULL, nextQuadLabel(), alpha_yylineno);
+                    emit(iop_assign, falseExpr, NULL, $6, nextQuadLabel(), alpha_yylineno);
                 }
 
                 struct forLoopStruct* loopStruct = (struct forLoopStruct*) malloc(sizeof(struct forLoopStruct));
@@ -1294,13 +1330,32 @@ returnstmt: RETURN Semicolon {
                 printMessage("returnstmt -> return;"); 
             }    |
             RETURN expr Semicolon   { 
+                expr_P trueExpr = newExpr(constbool_e, NULL);
+                trueExpr->boolConst = '1';
+                expr_P falseExpr = newExpr(constbool_e, NULL);
+                falseExpr->boolConst = '0';
+                expr_P numExpr = newExpr(constnum_e, NULL);
+                
+                if($2->type == boolexpr_e)
+                {
+                    $2->sym = newTemp(&offset, getSpace());
+                    
+                    backPatchList($2->truelist, nextQuadLabel());
+                    emit(iop_assign, trueExpr, NULL, $2, nextQuadLabel(), alpha_yylineno);
+
+                    numExpr->numConst = nextQuadLabel() + 2;
+                    emit(jump, NULL, NULL, numExpr, nextQuadLabel(), alpha_yylineno);
+                    backPatchList($2->falselist, nextQuadLabel());
+                    emit(iop_assign, falseExpr, NULL, $2, nextQuadLabel(), alpha_yylineno);
+                }
+
                 expr_P expr = $2;
                 if(allowReturn == 0)
                 {
                     printf(ANSI_COLOR_RED"Syntax error in line <%d>: return is not allowed outside of a function"ANSI_COLOR_RESET"\n", alpha_yylineno);
                     exit(-1);
                 }
-                emit(ret, expr, NULL, NULL, nextQuadLabel(), alpha_yylineno);    /*return the expr*/
+                emit(ret, NULL, NULL, expr, nextQuadLabel(), alpha_yylineno);    /*return the expr*/
                 printMessage("returnstmt -> return expr;"); }
     ;
 
@@ -1335,8 +1390,8 @@ void createBinaryFile(char* customName)
     char* value = NULL;
     int currStringSize = 0, i = 0;
 
-    unsigned int magicNumber    = 19955991;
-    fwrite(&magicNumber,        sizeof(magicNumber),        1,fp);  // MagicNumber
+    unsigned int CorrectNumber    = 42069360;
+    fwrite(&CorrectNumber,        sizeof(CorrectNumber),    1,fp);  // CorrectNumber
     fwrite(&totalNumConsts,     sizeof(totalNumConsts),     1,fp);  // totalNumConsts
     fwrite(&totalStringConsts,  sizeof(totalStringConsts),  1,fp);  // totalStringConsts
     fwrite(&totalNamedLibFuncs, sizeof(totalNamedLibFuncs), 1,fp);  // totalNamedLibFuncs 
@@ -1421,6 +1476,109 @@ void createBinaryFile(char* customName)
     fclose(fp);
 }
 
+void createTextFile(char* customName)
+{
+    FILE *fp;
+
+    if (customName)
+    {
+        char filename[100];
+        sprintf(filename, "%s.txt", customName);
+        fp = fopen(filename, "w");
+        if (fp == NULL)
+        {
+            printf("Cannot open file\n");
+            exit(0);
+        }
+    }
+    else
+    {
+        fp = fopen("AlphaCode.txt", "w");
+        if (fp == NULL)
+        {
+            printf("Cannot open file\n");
+            exit(0);
+        }
+    }
+
+    int totalGlobalsNo = getTotalGlobals();
+    instructionToBinary instr;
+
+    int i = 0;
+
+    unsigned int CorrectNumber    = 42069360;
+    fprintf(fp, "CorrectNumber = %d\n",      CorrectNumber);
+    fprintf(fp, "totalNumConsts = %d\n",     totalNumConsts);
+    fprintf(fp, "totalStringConsts = %d\n",  totalStringConsts);
+    fprintf(fp, "totalNamedLibFuncs = %d\n", totalNamedLibFuncs);
+    fprintf(fp, "totalUserFuncs = %d\n",     totalUserFuncs);
+    fprintf(fp, "totalInstructions = %d\n",  totalInstructions);
+    fprintf(fp, "totalGlobalsNo = %d\n",     totalGlobalsNo);
+    fprintf(fp, "\n");
+
+    // numConsts
+    fprintf(fp, "numConsts\n");
+    for(i = 0; i < totalNumConsts; i++)
+    {   
+        fprintf(fp, "numConsts[%d] = %f\n", i, numConsts[i]);
+    }
+    fprintf(fp, "\n");
+
+
+    // stringConsts
+    fprintf(fp, "stringConsts\n");
+    for(i = 0; i < totalStringConsts; i++)
+    {               
+        fprintf(fp, "stringConsts[%d] = %s\n", i, stringConsts[i]);
+    }
+    fprintf(fp, "\n");
+
+
+    // userFuncs
+    fprintf(fp, "userFuncs\n");
+    for(i = 0; i < totalUserFuncs; i++)
+    {
+        fprintf(fp, "userFuncs[%d] :\n", i);
+        fprintf(fp, "id = %s\n",        userFuncs[i].id);
+        fprintf(fp, "address = %d\n",   userFuncs[i].address);
+        fprintf(fp, "localSize = %d\n", userFuncs[i].localSize);
+        fprintf(fp, "totalargs = %d\n", userFuncs[i].totalargs);
+        fprintf(fp, "\n");
+    }
+    fprintf(fp, "\n");
+
+
+    // namedLibFuncs
+    fprintf(fp, "namedLibFuncs\n");
+    for(i = 0; i < totalNamedLibFuncs; i++)
+    {
+        fprintf(fp, "namedLibFuncs[%d] = %s\n", i, namedLibFuncs[i]);
+    }
+    fprintf(fp, "\n");
+
+
+    fprintf(fp, "Instructions : \n");
+    fprintf(fp, "instr#     opcode              result         offset         arg1          offset         arg2          offset    srcL\n");
+    fprintf(fp, "-----------------------------------------------------------------------------------------------------------------------\n");
+    for (i = 0; i < nextinstructionlabel(); i++)
+    {
+        fprintf(fp, "<%03d>:  op: %8s,    ", i, opcodeToString[instructions[i].opcode]);
+        
+        fprintf(fp, "type: %14s  ", typeToString(instructions[i].result.type));
+        fprintf(fp, "%3d,   ", instructions[i].result.val);
+        
+        fprintf(fp, "type:%14s  ", typeToString(instructions[i].arg1.type));
+        fprintf(fp, "%3d,   ", instructions[i].arg1.val);
+
+        fprintf(fp, ":type:%14s  ", typeToString(instructions[i].arg2.type));
+        fprintf(fp, "%3d,   ", instructions[i].arg2.val);
+
+        fprintf(fp, "%4d\n", instructions[i].srcLine);
+    }
+
+    fclose(fp);
+}
+
 int alpha_yyerror(char *yaccProvidedMessage)
 {
     fprintf(stderr, "%s: at line %d, before token: %s\n", yaccProvidedMessage, alpha_yylineno, alpha_yytext);
@@ -1465,7 +1623,13 @@ int main(int argc, char **argv)
     
     emit(iop_noop, NULL, NULL, NULL, nextQuadLabel(), alpha_yylineno);
     
+    printf("Generating target code...\n");
     generateTcode(nextQuadLabel());
+
+    printf("Creating text file...\n");
+    createTextFile(NULL);
+
+    printf("Creating binary file...\n");
     createBinaryFile(NULL); //i like the default name i have
 
     return 0;

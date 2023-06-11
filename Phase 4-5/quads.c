@@ -4,9 +4,9 @@
 #define CURR_SIZE (total*sizeof(quad))
 #define NEW_SIZE (EXPAND_SIZE*sizeof(quad) + CURR_SIZE)
 
-char *iopToString[] = {"iop_assign", "iop_add", "iop_sub", "iop_mul", "iop_div", "iop_mod", "iop_uminus", "iop_AND", 
-    "iop_OR", "iop_NOT", "if_eq", "if_noteq", "if_lesseq", "if_geatereq", "if_less", "if_greater", "jump", "call",
-    "param", "ret", "getretval", "funcstart", "funcend", "tablecreate", "tablegetelem", "tablesetelem"};
+char *iopToString[] = {"iop_assign", "iop_add", "iop_sub", "iop_mul", "iop_div", "iop_mod",
+    "if_eq", "if_noteq", "if_lesseq", "if_geatereq", "if_less", "if_greater", "jump", "call",
+    "param", "ret", "getretval", "funcstart", "funcend", "tablecreate", "tablegetelem", "tablesetelem", "iop_noop"};
 
 unsigned int total = 0;
 unsigned int currQuad = 0;
@@ -27,7 +27,7 @@ void expand(void)
     total += EXPAND_SIZE;
 }
 
-void emit(enum iopcode op, expr* result, expr* arg1, expr* arg2, unsigned int label, unsigned int line)
+void emit(enum iopcode op, expr* arg1, expr* arg2, expr* result, unsigned int label, unsigned int line)
 {
     if(currQuad == total)
         expand();
@@ -103,7 +103,7 @@ void patchLabel(unsigned int quadnumber, unsigned int label)
     
     expr_P expr = newExpr(constnum_e, NULL);
     expr->numConst = label;
-	quads[quadnumber].arg2 = expr;
+	quads[quadnumber].result = expr;
 }
 
 void emit_param_recursive(expr_P elist, int line)
@@ -115,7 +115,7 @@ void emit_param_recursive(expr_P elist, int line)
 
     emit_param_recursive(tmp->next, line);
 
-    emit(param, tmp, NULL, NULL, nextQuadLabel(), line);
+    emit(param, NULL, NULL, tmp, nextQuadLabel(), line);
 }
 
 expr_P rule_call(expr_P lvalue, expr_P elist, int *offset, enum scopespace_t space, int scope, int line)
@@ -127,13 +127,13 @@ expr_P rule_call(expr_P lvalue, expr_P elist, int *offset, enum scopespace_t spa
     if(lvalue->type == tableitem_e)
     {
         func = newExpr(var_e, newTemp(offset, space));
-        emit(tablegetelem, func, lvalue, lvalue->index, nextQuadLabel(), line);
+        emit(tablegetelem, lvalue, lvalue->index, func, nextQuadLabel(), line);
     }
 
     emit_param_recursive(elist, line);
    
-    emit(call, func, NULL, NULL, nextQuadLabel(), line);
-    emit(getretval, result, NULL, NULL, nextQuadLabel(), line);
+    emit(call, NULL, NULL, func, nextQuadLabel(), line);
+    emit(getretval, NULL, NULL, result, nextQuadLabel(), line);
 
     return result;
 }
@@ -177,7 +177,7 @@ symbol* newTemp(int *offset, enum scopespace_t space)
         name = malloc(5*sizeof(char));/*_t and \0 are 3 chars and 2 chars for digits allowing up to 100 temporary variables*/
         snprintf(name, 5, "_t%d", totaltmp);/*gives a new name for a temporary variable every time it is called based on a global counter*/
         elem = addSymbol(name, global_var, 0, 0, *offset, space);
-        *offset++;
+        (*offset)++;
         totaltmp++;
         tmpcounter++;
     }
@@ -208,34 +208,14 @@ void writeQuadsToFile()
         exit(-1);
     }
 
-    fprintf(out, "quad#     opcode              result                      arg1                arg2                \n");
+    fprintf(out, "quad#     opcode                   arg1                          arg2                       result              \n");
     fprintf(out, "----------------------------------------------------------------------------------------------------------------\n");
     for(int i = 0; i < currQuad; i++)
     {
-        fprintf(out, "<%d>:   op: %12s,    ", p->label, iopToString[p->op]);
+        fprintf(out, "<%03d>:   op: %12s,    ", p->label, iopToString[p->op]);
         //printf("now emitting %s\n", iopToString[p->op]);
-        
-        if(p->result == NULL)
-            fprintf(out, "  result: ----------,      ");
-        else if(p->result->type == constnum_e)
-            fprintf(out, "  result: %10f,     ", p->result->numConst);
-        else if(p->result->type == constbool_e || p->result->type == boolexpr_e)
-        {
-            if(p->result->sym != NULL)  /*first check if i gave it a temp varable*/
-                fprintf(out, "  result: %10s,    ", p->result->sym->varName);
-            else if(p->result->boolConst == 0)
-                fprintf(out, "  result: %10s,    ", "FALSE");
-            else
-                fprintf(out, "  result: %10s,    ", "TRUE");
-        }
-        else if(p->result->type == conststring_e)
-            fprintf(out, "  result: %10s,    ", p->result->strConst);
-        else if(p->result->sym != NULL || p->result->type == tableitem_e)/* p->result->sym != NULL, result must always be a variable*/
-            fprintf(out, "  result: %10s,     ", p->result->sym->varName);
-        else
-            fprintf(out, "  result: ???????????");
 
-
+        //arg1
         if(p->arg1 == NULL)
         {
             fprintf(out, "  arg1: ----------,    ");
@@ -244,13 +224,13 @@ void writeQuadsToFile()
         {
             if(p->arg1->sym != NULL || p->arg1->type == programfunc_e)
             {
-                fprintf(out, "  arg1: %10s,   ", p->arg1->sym->varName);
+                fprintf(out, "  arg1: %10s,    ", p->arg1->sym->varName);
             }
             else if(p->arg1->type == constnum_e)
                 fprintf(out, "  arg1: %10f,    ", p->arg1->numConst);
             else if(p->arg1->type == constbool_e || p->arg1->type == boolexpr_e)
             {
-                if(p->arg1->boolConst == 0)
+                if(p->arg1->boolConst == '0')
                     fprintf(out, "  arg1: %10s,    ", "FALSE");
                 else
                     fprintf(out, "  arg1: %10s,    ", "TRUE");
@@ -263,16 +243,16 @@ void writeQuadsToFile()
                 fprintf(out, "  arg1: ???????????");
         }
 
-
+        //arg2
         if(p->arg2 != NULL)
         {
             if(p->arg2->sym != NULL)
-                fprintf(out, "  arg2: %10s,   ", p->arg2->sym->varName);
+                fprintf(out, "  arg2: %10s,    ", p->arg2->sym->varName);
             else if(p->arg2->type == constnum_e)
                 fprintf(out, "  arg2: %10f,    ", p->arg2->numConst);
             else if(p->arg2->type == constbool_e || p->arg2->type == boolexpr_e)
             {
-                if(p->arg2->boolConst == 0)
+                if(p->arg2->boolConst == '0')
                     fprintf(out, "  arg2: %10s,    ", "FALSE");
                 else
                     fprintf(out, "  arg2: %10s,    ", "TRUE");
@@ -280,12 +260,34 @@ void writeQuadsToFile()
             else if(p->arg2->type == conststring_e || p->arg2->type == tableitem_e)
                 fprintf(out, "  arg2: %10s,    ", p->arg2->strConst);
             else if(p->arg2->type == nil_e)
-                fprintf(out, "  arg1:        NIL,    ");
+                fprintf(out, "  arg2:        NIL,    ");
             else
                 fprintf(out, "  arg2: ???????????");
         }
         else
             fprintf(out, "  arg2: ----------,    ");
+
+
+        //result
+        if(p->result == NULL)
+            fprintf(out, "  result: ----------,      ");
+        else if(p->result->type == constnum_e)
+            fprintf(out, "  result: %10f,     ", p->result->numConst);
+        else if(p->result->type == constbool_e || p->result->type == boolexpr_e)
+        {
+            if(p->result->sym != NULL)  /*first check if i gave it a temp varable*/
+                fprintf(out, "  result: %10s,    ", p->result->sym->varName);
+            else if(p->result->boolConst == '0')
+                fprintf(out, "  result: %10s,    ", "FALSE");
+            else
+                fprintf(out, "  result: %10s,    ", "TRUE");
+        }
+        else if(p->result->type == conststring_e)
+            fprintf(out, "  result: %10s,    ", p->result->strConst);
+        else if(p->result->sym != NULL || p->result->type == tableitem_e)/* p->result->sym != NULL, result must always be a variable*/
+            fprintf(out, "  result: %10s,     ", p->result->sym->varName);
+        else
+            fprintf(out, "  result: ???????????");
         
         fprintf(out, "  from line %d\n", p->line);
 

@@ -5,9 +5,9 @@
 #include <assert.h>
 
 enum iopcode {
-    iop_assign, iop_add, iop_sub, iop_mul, iop_div, iop_mod, if_eq, 
-    if_noteq, if_lesseq, if_greatereq, if_less, if_greater, jump, call, param, ret, getretval, funcstart, funcend, 
-    tablecreate, tablegetelem, tablesetelem, iop_noop
+    iop_assign, iop_add, iop_sub, iop_mul, iop_div, iop_mod, 
+    if_eq, if_noteq, if_lesseq, if_greatereq, if_less, if_greater, 
+    jump, call, param, ret, getretval, funcstart, funcend, tablecreate, tablegetelem, tablesetelem, iop_noop
 };
 
 enum expr_t {
