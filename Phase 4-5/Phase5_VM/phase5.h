@@ -9,9 +9,9 @@ extern avm_memcell ax, bx, cx;
 extern avm_memcell retval;
 extern unsigned int top, topsp;
 
-extern unsigned char	executionFinished;
-extern unsigned int 	pc;
-extern unsigned int 	currLine;
+extern unsigned char executionFinished;
+extern unsigned int pc;
+extern unsigned int currLine;
 
 extern double* numConstsTable;
 extern unsigned int totalNumConsts;
@@ -35,7 +35,5 @@ avm_memcell* avm_translate_operand(vmarg* arg, avm_memcell* reg);
 double consts_getnumber(unsigned int index);
 char*  consts_getstring(unsigned int index);
 char*  libfuncs_getfunc(unsigned int index);
-
-void initPhase5(void);
 
 #endif

@@ -239,7 +239,7 @@ DataTables* decoder(int printFlag, char* BinaryName)
 
 	    if(printFlag)
 		{
-			printf("<%03d>:   op: %8s,    ", i, opcodeToString[instr.instrOpcode]);
+			printf("<%03d>:   op: %13s,    ", i, opcodeToString[instr.instrOpcode]);
         
 			printf("type:%14s    ", typeToString(instr.resultType));
 			printf("%3d,    ", instr.resultOffset);

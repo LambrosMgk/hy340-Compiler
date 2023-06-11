@@ -21,7 +21,7 @@ unsigned int totalUserFuncs;
 instruction* instructions;
 unsigned int totalInstructions; 
 
-void EXPANDER (TYPER type) 
+void EXPANDER (EXPAND_TYPE type) 
 {
 	switch(type)
     {
@@ -174,7 +174,7 @@ int INSERT_USERFUNC (unsigned int address, unsigned int localSize, unsigned int 
 	{ 
 		if(strcmp(userFuncs[i].id, id) == 0 && userFuncs[i].address == address)
 		{
-			 return i;
+			return i;
 		} 
 	}
 
@@ -191,7 +191,6 @@ int INSERT_USERFUNC (unsigned int address, unsigned int localSize, unsigned int 
 	p -> id = id;
 	
 	return position;
-
 }
 
 int emitInstr (instruction t)

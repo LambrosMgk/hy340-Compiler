@@ -20,7 +20,7 @@
 #define CURR_SIZE_INSTR_ARR	(totalInstrSize * sizeof(instruction))
 #define NEW_SIZE_INSTR_ARR	(EXPAND_SIZE * sizeof(instruction) + CURR_SIZE_INSTR_ARR)
 
-typedef enum TYPER { NUMBER_T, STRING_T, LIBFUNC_T, USERFUNC_T, INSTRUCT_T} TYPER;
+typedef enum EXPAND_TYPE { NUMBER_T, STRING_T, LIBFUNC_T, USERFUNC_T, INSTRUCT_T} EXPAND_TYPE;
 
 extern int totalNumSize;
 extern int totalStringSize;
@@ -28,7 +28,7 @@ extern int totalLibFuncSize;
 extern int totalUserFuncSize;
 extern int totalInstrSize;
 
-void EXPANDER (TYPER type);
+void EXPANDER (EXPAND_TYPE type);
 
 int INSERT_NUM (double val);
 int INSERT_STRING (char* val);

@@ -114,7 +114,7 @@ void generate (vmopcode op, quad *quadInput)
 {
 	instruction t;
 
-	setArgsNull(&t);
+	initInstrArgs(&t);
 	t.opcode = op;
 	t.srcLine = nextinstructionlabel();
 
@@ -140,7 +140,7 @@ void generate_NOP (quad *quadInput)
 {
 	instruction t; 
 
-	setArgsNull(&t);
+	initInstrArgs(&t);
 	t.opcode = nop_v; 
 	t.srcLine = nextinstructionlabel();
 	quadInput->taddress = nextinstructionlabel();
@@ -153,7 +153,7 @@ void generate_relational(vmopcode op, quad *quadInput)
 {
 	instruction t;
 
-	setArgsNull(&t);
+	initInstrArgs(&t);
 	t.opcode = op;
 	t.srcLine = nextinstructionlabel();
 	
@@ -183,7 +183,7 @@ void generate_PARAM(quad *quadInput)
 	quadInput->taddress = nextinstructionlabel();
 	instruction t;
 
-	setArgsNull(&t);
+	initInstrArgs(&t);
 	t.opcode = pusharg_v;
 	t.srcLine = nextinstructionlabel();
 
@@ -196,10 +196,10 @@ void generate_CALL(quad *quadInput)
 	quadInput->taddress = nextinstructionlabel(); 
 	instruction t;
 
-	setArgsNull(&t);
+	initInstrArgs(&t);
 	t.opcode = call_v; 
 	t.srcLine = nextinstructionlabel();
-
+	
 	make_operand(quadInput->result, &t.result);
 	emitInstr(t);
 }
@@ -209,7 +209,7 @@ void generate_GETRETVAL(quad *quadInput)
 	quadInput->taddress = nextinstructionlabel(); 
 	instruction t;
 
-	setArgsNull(&t);
+	initInstrArgs(&t);
 	t.opcode = assign_v; 
 	t.srcLine = nextinstructionlabel();
 		
@@ -229,37 +229,11 @@ void generate_FUNCSTART(quad *quadInput)
 	symbol* s = topFuncStackTarget();
 
 	instruction t;
-	setArgsNull(&t);
+	initInstrArgs(&t);
 	t.opcode = funcenter_v; 
 	t.srcLine = nextinstructionlabel();
 
 	make_operand(quadInput->result, &t.result);
-	emitInstr(t);
-}
-
-void generate_RETURN(quad *quadInput) 
-{ 
-	quadInput->taddress = nextinstructionlabel();
-	instruction t;
-
-	setArgsNull(&t);
-	t.opcode = assign_v;
-	t.srcLine = nextinstructionlabel();
-
-	make_retvalOperand(&t.result);
-	make_operand(quadInput->result, &t.arg1);
-	emitInstr(t);
-
-	symbol* f = topFuncStackTarget();
-	appendFuncStackTarget(f, nextinstructionlabel());
-	assert(f->returnList);
-
-	setArgsNull(&t);
-	t.srcLine = nextinstructionlabel();
-	t.opcode = jump_v;
-	reset_operand(&t.arg1);
-	reset_operand(&t.arg2);
-	t.result.type = label_a;
 	emitInstr(t);
 }
 
@@ -277,12 +251,38 @@ void generate_FUNCEND(quad *quadInput)
 
  	quadInput->taddress = nextinstructionlabel();
  	instruction t;
- 	setArgsNull(&t);
+ 	initInstrArgs(&t);
  	t.opcode = funcexit_v;
  	t.srcLine = nextinstructionlabel();
 		
  	make_operand(quadInput->result, &t.result);
  	emitInstr(t);
+}
+
+void generate_RETURN(quad *quadInput) 
+{
+	quadInput->taddress = nextinstructionlabel();
+	instruction t;
+
+	initInstrArgs(&t);
+	t.opcode = assign_v;
+	t.srcLine = nextinstructionlabel();
+
+	make_retvalOperand(&t.result);
+	make_operand(quadInput->result, &t.arg1);
+	emitInstr(t);
+
+	symbol* func = topFuncStackTarget();
+	appendFuncStackTarget(func, nextinstructionlabel());
+	assert(func->returnList);
+
+	initInstrArgs(&t);
+	t.srcLine = nextinstructionlabel();
+	t.opcode = jump_v;
+	reset_operand(&t.arg1);
+	reset_operand(&t.arg2);
+	t.result.type = label_a;
+	emitInstr(t);
 }
 
 void patchInstrLabel(unsigned int instrNo, unsigned int taddress)
@@ -309,7 +309,7 @@ void patchIncompleteJumps(unsigned int totalQuads)
 
 unsigned int nextinstructionlabel(){ return totalInstructions; }
 
-void EXPANDER_IJ(void)
+void EXPAND_IJ(void)
 {
 	assert(ij_size == ij_total);
 
@@ -328,7 +328,7 @@ void EXPANDER_IJ(void)
 void add_incomplete_jump(unsigned int instrNo, unsigned int iaddress)
 { 
 	if(ij_total == ij_size)
-		EXPANDER_IJ();
+		EXPAND_IJ();
 
 	incomplete_jump* p = ij_head + ij_total++;
 
@@ -340,7 +340,7 @@ unsigned int currprocessedquad(void){ return currQuadNo; }
 
 void reset_operand(vmarg *arg){ arg->val = -1; }
 
-void setArgsNull(instruction* t)
+void initInstrArgs(instruction* t)
 {
 	t->arg1.val = -1; 
 	t->arg1.type = 11;

@@ -90,6 +90,6 @@ int isFuncStackTargetEmpty();
 void pushFuncStackTarget(symbol* mem);
 symbol* popFuncStackTarget();
 symbol* topFuncStackTarget();
-void appendFuncStackTarget(symbol* f, unsigned int instrLabel);
+void appendFuncStackTarget(symbol* func, unsigned int instrLabel);
 
 #endif

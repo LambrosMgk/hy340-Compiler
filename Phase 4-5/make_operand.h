@@ -8,7 +8,7 @@ void make_numberOperand				(vmarg* arg, double val);
 void make_boolOperand 				(vmarg* arg, unsigned int val);
 void make_retvalOperand 			(vmarg* arg);
 
-void EXPANDER_IJ					(void);
+void EXPAND_IJ					(void);
 void add_incomplete_jump			(unsigned int instrNo, unsigned int taddress);
 void patchInstrLabel				(unsigned int instrNo, unsigned int taddress);
 void patchIncompleteJumps			(unsigned int totalQuads);
@@ -16,7 +16,7 @@ void patchIncompleteJumps			(unsigned int totalQuads);
 void make_boolOperand 				(vmarg *arg, unsigned int logical);
 void reset_operand 					(vmarg *arg);
 void make_retvalOperand 			(vmarg *arg);
-void setArgsNull					(instruction* t);
+void initInstrArgs					(instruction* t);
 void generateTcode					(unsigned int totalQuads);
 
 void generate						(vmopcode op, quad *quadInput);

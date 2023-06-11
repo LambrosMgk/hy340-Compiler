@@ -10,9 +10,9 @@
 
 
 typedef enum avm_memcell_t avm_memcell_t;
-typedef struct avm_memcell avm_memcell;
 typedef	struct avm_table avm_table;
 typedef struct avm_table_bucket avm_table_bucket;
+typedef struct avm_memcell avm_memcell;
 
 extern unsigned int totalActuals;
 
@@ -20,6 +20,10 @@ extern unsigned int totalActuals;
 #define AVM_SAVEDPC_OFFSET    	+3
 #define AVM_SAVEDTOP_OFFSET   	+2
 #define AVM_SAVEDTOPSP_OFFSET	+1
+
+#define AVM_STACKSIZE 4096
+
+#define AVM_TABLE_HASHSIZE	211
 
 enum avm_memcell_t {
 
@@ -51,8 +55,6 @@ struct avm_memcell{
 
 };
 
-#define AVM_STACKSIZE	4096
-#define AVM_CLEARMEM(m)	memset(&(m), 0, sizeof(m));
 
 extern avm_memcell stack[AVM_STACKSIZE];
 
@@ -62,12 +64,11 @@ static void avm_initstack (void)
 
 	for(i = 0; i < AVM_STACKSIZE; i++)
 	{
-		AVM_CLEARMEM(stack[i]);
+		memset(&stack[i], 0, sizeof(stack[i]));
 		stack[i].type = undef_m;
 	}
 }
 
-#define AVM_TABLE_HASHSIZE	211
 
 struct avm_table_bucket {
 
@@ -86,56 +87,54 @@ struct avm_table {
 
 };
 
-avm_table*			avm_tableNew(void);
-void 				avm_tableDestroy(avm_table* t);
-avm_memcell*		avm_tablegetelem(avm_table* table, avm_memcell* index);
-void 				avm_tablesetelem(avm_table* table, avm_memcell* index, avm_memcell*	value);
-void 				avm_tableIncRefCounter(avm_table* t);
-void 				avm_tableDecRefCounter(avm_table* t);
-void 				avm_tableBucketsInit(avm_table_bucket** p);	
-void 				avm_memcellClear(avm_memcell* m);
-void 				avm_tableBucketsDestroy(avm_table_bucket** m);
+avm_table*		avm_tableNew(void);
+void 			avm_tableDestroy(avm_table* t);
+avm_memcell*	avm_tablegetelem(avm_table* table, avm_memcell* index);
+void 			avm_tablesetelem(avm_table* table, avm_memcell* index, avm_memcell*	value);
+void 			avm_tableIncRefCounter(avm_table* t);
+void 			avm_tableDecRefCounter(avm_table* t);
+void 			avm_tableBucketsInit(avm_table_bucket** p);	
+void 			avm_tableBucketsDestroy(avm_table_bucket** m);
+void 			avm_memcellClear(avm_memcell* m);
 
-typedef void 		(*memclear_func_t) (avm_memcell*);
+typedef void 	(*memclear_func_t) (avm_memcell*);
 
-extern void 		memclear_string(avm_memcell* m);
-extern void 		memclear_table(avm_memcell* m);
+extern void 	memclear_string(avm_memcell* m);
+extern void 	memclear_table(avm_memcell* m);
 
-extern void 		avm_print_warning(char* msg1 , char* id , char* msg2);
-extern void 		avm_assign(avm_memcell* lv, avm_memcell* rv);
+extern void 	avm_print_warning(char* msg1 , char* id , char* msg2);
+extern void 	avm_assign(avm_memcell* lv, avm_memcell* rv);
 
-extern void 		avm_print_error(char* msg1 , char* id , char* msg2);
-extern char* 		avm_tostring(avm_memcell* m);
-extern void 		avm_callLibFunc(char* libfuncName);
-extern void 		avm_callSaveEnvironment(void);
+extern void 	avm_print_error(char* msg1 , char* id , char* msg2);
+extern char* 	avm_tostring(avm_memcell* m);
+extern void 	avm_callLibFunc(char* libfuncName);
+extern void 	avm_callSaveEnvironment(void);
 
-extern void 		avm_dec_top(void);
-extern void			avm_push_envValue(unsigned int val);
+extern void 	avm_dec_top(void);
+extern void		avm_push_envValue(unsigned int val);
 
 extern userfunc*		avm_getfuncinfo(unsigned int address);
 extern unsigned int 	avm_get_envvalue(unsigned int i);	
 
-typedef void 			(*library_func_t)(void);
-library_func_t 			avm_getlibraryfunc(char* id);
+typedef void 		(*library_func_t)(void);
+library_func_t 		avm_getlibraryfunc(char* id);
 
-unsigned int 			avm_totalactuals(void);
+unsigned int 		avm_totalactuals(void);
 
-avm_memcell* 			avm_getactual(unsigned int i);
-void 					libfunc_print(void);
-void 					avm_registerlibfunc(char* id, library_func_t addr);
+avm_memcell* 		avm_getactual(unsigned int i);
 
-void 					printTable(avm_memcell* t);
+void 	printTable(avm_memcell* t);
 
-typedef char* 			(*tostring_func_t)(avm_memcell*);
+typedef char* 		(*tostring_func_t)(avm_memcell*);
 
-extern char*			number_tostring(avm_memcell*);
-extern char*			string_tostring(avm_memcell*);
-extern char*			bool_tostring(avm_memcell*);
-extern char*			table_tostring(avm_memcell*);
-extern char*			userfunc_tostring(avm_memcell*);
-extern char*			libfunc_tostring(avm_memcell*);
-extern char*			nil_tostring(avm_memcell*);
-extern char*			undef_tostring(avm_memcell*);
+extern char*	number_tostring(avm_memcell*);
+extern char*	string_tostring(avm_memcell*);
+extern char*	bool_tostring(avm_memcell*);
+extern char*	table_tostring(avm_memcell*);
+extern char*	userfunc_tostring(avm_memcell*);
+extern char*	libfunc_tostring(avm_memcell*);
+extern char*	nil_tostring(avm_memcell*);
+extern char*	undef_tostring(avm_memcell*);
 
 typedef double (*arithmetic_func_t)(double x , double y);
 
@@ -165,9 +164,6 @@ unsigned char undef_tobool 		(avm_memcell* m);
 
 unsigned char avm_tobool		(avm_memcell *m);
 
-void libfunc_typeof	(void);
-
 void avm_initialize	(void);
-void libfunc_totalarguments	(void);
 
 #endif

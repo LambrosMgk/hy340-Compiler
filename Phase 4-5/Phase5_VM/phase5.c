@@ -58,14 +58,13 @@ avm_memcell* avm_translate_operand(vmarg* arg, avm_memcell* reg)
 		case nil_a:		reg->type = nil_m; return reg;
 
 		case userfunc_a:	{
-
 								reg->type = userfunc_m;
 								userfunc* func = avm_getfuncinfo(arg->val);
 								reg->data.funcVal = func->address;
 								return reg;
 							}
 
-		case libfunc_a:		{	
+		case libfunc_a:		{
 								reg->type = libfunc_m;
 								reg->data.libfuncVal = libfuncs_getfunc(arg->val);
 								return reg;
@@ -91,14 +90,6 @@ char* libfuncs_getfunc(unsigned int index)
 {
 	assert(index >= 0 && index < totalLibFuncs);
 	return libFuncsTable[index];
-}
-
-void initPhase5(void)
-{
-	executionFinished = 0;
-	pc = 0;
-	currLine = 0;
-	top = AVM_STACKSIZE - 1 - totalGlobals;
 }
 
 int main(int argc, char **argv)
@@ -154,7 +145,12 @@ int main(int argc, char **argv)
 	code = tables->code;
 	codeSize = tables->codeSize;
 
-	initPhase5();
+	//initialize vars
+	executionFinished = 0;
+	pc = 0;
+	currLine = 0;
+	top = AVM_STACKSIZE - 1 - totalGlobals;
+
 	avm_initialize();
 
 	while(executionFinished == 0)

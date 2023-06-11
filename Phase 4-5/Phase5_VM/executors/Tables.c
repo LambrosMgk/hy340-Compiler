@@ -37,17 +37,17 @@ void execute_tablegetelem (instruction* instr)
 
 	avm_memcellClear(lv);
 	lv->type = nil_m;
+
 	if(t->type != table_m)
     {
 		avm_print_error("Illegal use of type ",typeStringsT[t->type]," as table!");
 		executionFinished = 1;
-	
 	} 
     else 
     {
-		avm_memcell* content = avm_tablegetelem(t->data.tableVal , i);
+		avm_memcell* content = avm_tablegetelem(t->data.tableVal, i);
 		
-		// NEEDS FIXING PHASE 5 TABLEVAL NOT INSERTED
+		//To do : insert tableval
 
 		if(content)
         {
@@ -55,11 +55,7 @@ void execute_tablegetelem (instruction* instr)
 		} 
         else 
         {
-
-			char* ts = avm_tostring(t);
-			char* is = avm_tostring(i);
-			
-			avm_print_warning("Index not found! Table: ",ts,is);
+			avm_print_warning("Index not found, Table: ", avm_tostring(t), avm_tostring(i));
 		}
 	}
 }

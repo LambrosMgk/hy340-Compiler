@@ -11,7 +11,7 @@ void execute_jeq (instruction* instr)
 
 	if(rv1->type == undef_m || rv2->type == undef_m)
 	{
-		avm_print_error("'undef' involved in equality",NULL,NULL);
+		avm_print_error("'undef' involved in equality", NULL, NULL);
 		executionFinished = 1;
 	}
 	else if (rv1->type == nil_m || rv2->type == nil_m)
@@ -24,7 +24,7 @@ void execute_jeq (instruction* instr)
 	}
 	else if(rv1->type != rv2->type)
 	{
-		avm_print_error("Equality check between different types is illegal",NULL,NULL);
+		avm_print_error("Equality check between different types is illegal", NULL, NULL);
 		executionFinished = 1;
 	}
 	else
@@ -35,7 +35,7 @@ void execute_jeq (instruction* instr)
 		}
 		else if(rv1->type == string_m)
 		{
-			result = !strcmp(rv1->data.strVal,rv2->data.strVal);
+			result = !strcmp(rv1->data.strVal, rv2->data.strVal);
 		}
 		else
 		{
@@ -58,7 +58,7 @@ void execute_jne (instruction* instr)
 
 	if(rv1->type == undef_m || rv2->type == undef_m)
 	{
-		avm_print_error("'undef' involved in equality",NULL,NULL);
+		avm_print_error("'undef' involved in equality", NULL, NULL);
 		executionFinished = 1;
 	}
 	else if (rv1->type == nil_m || rv2->type == nil_m)
@@ -71,7 +71,7 @@ void execute_jne (instruction* instr)
 	}
 	else if(rv1->type != rv2->type)
 	{
-		avm_print_error("Equality check between different types is illegal",NULL,NULL);
+		avm_print_error("Equality check between different types is illegal", NULL, NULL);
 		executionFinished = 1;
 	}
 	else
@@ -82,7 +82,7 @@ void execute_jne (instruction* instr)
 		}
 		else if(rv1->type == string_m)
 		{
-			result = !strcmp(rv1->data.strVal,rv2->data.strVal); 
+			result = !strcmp(rv1->data.strVal, rv2->data.strVal); 
 		}
 		else
 		{

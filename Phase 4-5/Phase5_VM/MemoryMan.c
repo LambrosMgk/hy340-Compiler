@@ -4,19 +4,6 @@ unsigned int totalActuals = 0;
 int innerTablePrint = 0; 
 avm_memcell stack[AVM_STACKSIZE];
 
-tostring_func_t tostringFuncs[] = {
-
-	number_tostring,
-	string_tostring,
-	bool_tostring,
-	table_tostring,
-	userfunc_tostring,
-	libfunc_tostring,
-	nil_tostring,
-	undef_tostring
-
-};
-
 library_func_t libraryFuncs[12];
 
 
@@ -69,7 +56,7 @@ void avm_tableBucketsInit(avm_table_bucket** p)
 {
 	unsigned int i = 0;
 
-	for(i=0; i < AVM_TABLE_HASHSIZE; ++i)
+	for(i = 0; i < AVM_TABLE_HASHSIZE; i++)
 	{
 		p[i] = (avm_table_bucket*) 0;
 	}
@@ -78,10 +65,10 @@ void avm_tableBucketsInit(avm_table_bucket** p)
 avm_table* avm_tableNew(void)
 {
 	avm_table* t = (avm_table*) malloc(sizeof(avm_table));
-	AVM_CLEARMEM(*t);
+	memset(t, 0, sizeof(*t));
 
 	t->refCounter = t->total = 0;
-	avm_tableBucketsInit(t->numIndexed); 
+	avm_tableBucketsInit(t->numIndexed);
 	avm_tableBucketsInit(t->strIndexed);
 
 	return t;
@@ -92,7 +79,7 @@ void avm_tableBucketsDestroy(avm_table_bucket** p)
 	unsigned int i = 0;
 	avm_table_bucket* b;
 
-	for(i = 0; i < AVM_TABLE_HASHSIZE; ++i, ++p)
+	for(i = 0; i < AVM_TABLE_HASHSIZE; i++, p++)
 	{
 		for(b = *p; b;)
 		{
@@ -216,8 +203,8 @@ void avm_dec_top(void)
 
 void avm_push_envValue(unsigned int val)
 {
-	stack[top].type			= number_m;
-	stack[top].data.numVal	= val;
+	stack[top].type	= number_m;
+	stack[top].data.numVal = val;
 	avm_dec_top();
 }
 
@@ -244,7 +231,7 @@ void avm_callLibFunc(char* id)
 
 	if(!f)
 	{
-		avm_print_error("Unsupported libfunc '",id,"' called!");
+		avm_print_error("Library function '",id,"' is not supported!");
 		executionFinished = 1;
 	}
 	else
@@ -272,8 +259,7 @@ avm_memcell* avm_getactual(unsigned int i)
 
 void printTable(avm_memcell* t)
 {
-	avm_memcell* reader = NULL;
-	avm_table_bucket* readerS = NULL;
+	avm_table_bucket* reader = NULL;
 	int k;
 
 	if(t->type == table_m)
@@ -283,65 +269,64 @@ void printTable(avm_memcell* t)
 		else
 			printf("[ ");
 
-		k = 0;
-		for(;k < AVM_TABLE_HASHSIZE;k++)
-		{
-			reader = t;
-			readerS = reader->data.tableVal->strIndexed[k];
 
-			while(readerS != NULL)	// printf("strIndexed\n");
+		for(k = 0; k < AVM_TABLE_HASHSIZE; k++)
+		{
+			reader = t->data.tableVal->strIndexed[k];
+
+			while(reader != NULL)
 			{
 				if(!innerTablePrint) 
 					printf("\t{ ");
 				else
 					printf(" { ");
 
-				if(readerS->key.type == string_m)
+				if(reader->key.type == string_m)
 				{
-					printf("\"%s\" : ", readerS->key.data.strVal);
+					printf("\"%s\" : ", reader->key.data.strVal);
 				}
-				else if(readerS->key.type == number_m)
+				else if(reader->key.type == number_m)
 				{
-					printf("%d : ", (int) readerS->key.data.numVal);
+					printf("%d : ", (int) reader->key.data.numVal);
 				}
 
-				if(readerS->value.type == table_m)
+				if(reader->value.type == table_m)
 					innerTablePrint = 1;
 
-				printf("%s", avm_tostring(&readerS->value));							
+				printf("%s", avm_tostring(&reader->value));							
 
 				if(!innerTablePrint) 
 					printf(" } ,\n");
 				else
 					printf(" } , ");
 
-				readerS = readerS->next;
+				reader = reader->next;
 			}
 
-			readerS = reader->data.tableVal->numIndexed[k];
+			reader = t->data.tableVal->numIndexed[k];
 			
-			while(readerS != NULL)	// printf("numIndexed\n");
+			while(reader != NULL)
 			{ 
 				if(!innerTablePrint) 
 					printf("\t{ ");
 				else
 					printf(" { ");
 
-				if(readerS->key.type == string_m)
+				if(reader->key.type == string_m)
 				{
-					printf("\"%s\" : ", readerS->key.data.strVal);
+					printf("\"%s\" : ", reader->key.data.strVal);
 				}
-				else if(readerS->key.type == number_m)
+				else if(reader->key.type == number_m)
 				{
-					printf("%d : ", (int) readerS->key.data.numVal);
+					printf("%d : ", (int) reader->key.data.numVal);
 				}
 
-				if(readerS->value.type == table_m)
+				if(reader->value.type == table_m)
 					innerTablePrint = 1;
 
-				printf("%s", avm_tostring(&readerS->value));
+				printf("%s", avm_tostring(&reader->value));
 
-				readerS = readerS->next;
+				reader = reader->next;
 
 				if(!innerTablePrint) 
 					printf(" } ,\n");
@@ -359,92 +344,12 @@ void printTable(avm_memcell* t)
 	innerTablePrint = 0;
 }
 
-char* avm_tostring(avm_memcell* m)
-{
-	assert(m->type >= 0 && m->type <= undef_m);
-	return (*tostringFuncs[m->type])(m);
-}
 
-char* number_tostring(avm_memcell* m)
-{
-	assert(m->type == number_m);
+double add_impl(double x , double y){ return x + y; }
 
-    char* convertedStr = NULL;
-    double decPart;
+double sub_impl(double x , double y){ return x - y; }
 
-    decPart = modf(m->data.numVal, &decPart);
-
-    if (decPart == 0)
-    {
-        int length = snprintf(NULL, 0, "%d", (int)m->data.numVal);
-        convertedStr = malloc(length + 1);
-        snprintf(convertedStr, length + 1, "%d", (int)m->data.numVal);
-    }
-    else
-    {
-        int length = snprintf(NULL, 0, "%lf", m->data.numVal);
-        convertedStr = malloc(length + 1);
-        snprintf(convertedStr, length + 1, "%lf", m->data.numVal);
-    }
-
-    return convertedStr;
-}
-
-char* string_tostring(avm_memcell* m)
-{
-	assert(m->type == string_m);
-	return m->data.strVal;
-}
-
-char* bool_tostring(avm_memcell* m)
-{
-	assert(m->type == bool_m);
-	if(m->data.boolVal == '0')
-		return "false";
-	else
-		return "true";
-}
-
-char* table_tostring(avm_memcell* m)
-{
-	assert(m->type == table_m);
-
-	printTable(m);
-
-	return "";
-}
-
-char* userfunc_tostring(avm_memcell* m)
-{
-	assert(m->type == userfunc_m);
-	char* convertedStr = "Func";
-	return convertedStr;
-}
-
-char* libfunc_tostring(avm_memcell* m)
-{
-	char* convertedStr = "LibFunc";
-	return convertedStr;
-}
-
-char* nil_tostring(avm_memcell* m)
-{
-	char* convertedStr = "Nil";
-	return convertedStr;
-}
-
-char*	undef_tostring(avm_memcell* m)
-{
-	char* convertedStr = "Undef";
-	return convertedStr;
-}
-
-
-double add_impl(double x , double y){ return x+y; }
-
-double sub_impl(double x , double y){ return x-y; }
-
-double mul_impl(double x , double y){ return x*y; }
+double mul_impl(double x , double y){ return x * y; }
 
 double div_impl(double x , double y)
 {
@@ -470,9 +375,9 @@ double mod_impl(double x , double y)
 
 void execute_arithmetic(instruction* instr)
 {
-	avm_memcell* lv 	= avm_translate_operand(&instr->result, (avm_memcell*) 0 );
-	avm_memcell* rv1 	= avm_translate_operand(&instr->arg1, &ax);
-	avm_memcell* rv2	= avm_translate_operand(&instr->arg2, &bx);
+	avm_memcell* lv = avm_translate_operand(&instr->result, (avm_memcell*) 0 );
+	avm_memcell* rv1 = avm_translate_operand(&instr->arg1, &ax);
+	avm_memcell* rv2 = avm_translate_operand(&instr->arg2, &bx);
 
 	assert(lv && (&stack[AVM_STACKSIZE - 1] >= lv && lv > &stack[top] || lv == &retval));
 	assert(rv1 && rv2);
@@ -484,10 +389,10 @@ void execute_arithmetic(instruction* instr)
 	}
 	else
 	{
-		arithmetic_func_t op 	= arithmeticFuncs[instr->opcode - add_v];
+		arithmetic_func_t op = arithmeticFuncs[instr->opcode - add_v];
 		avm_memcellClear(lv);
-		lv->type				= number_m;
-		lv->data.numVal			= (*op) (rv1->data.numVal , rv2->data.numVal);	
+		lv->type = number_m;
+		lv->data.numVal = (*op) (rv1->data.numVal , rv2->data.numVal);	
 	}
 }
 
@@ -506,9 +411,7 @@ void execute_comparison(instruction* instr)
 
 	assert(rv1 && rv2);
 
-	printf("arg2 type : %d, val : %d\n", instr->arg2.type, instr->arg2.val);
-	printf("rv1 type : %d, data : %d\n", rv1->type, rv1->data);
-	printf("rv2 type : %d, data : %d\n", rv2->type, rv2->data);
+	
 	if(rv1->type != number_m || rv2->type != number_m)
 	{
 		avm_print_error("Only numbers are allowed for comparison!", NULL, NULL);
@@ -590,15 +493,15 @@ void avm_tablesetelem(avm_table* table, avm_memcell* index, avm_memcell* value)
 	
 	int indexOfTable;
 
-	avm_memcell* gotit = avm_tablegetelem(table,index);
+	avm_memcell* tableGet = avm_tablegetelem(table,index);
 
 	if(index->type == string_m)
 	{
-		indexOfTable = (int) strlen (index->data.strVal) % AVM_TABLE_HASHSIZE;
+		indexOfTable = (int) strlen(index->data.strVal) % AVM_TABLE_HASHSIZE;
 		
-		if(gotit != NULL)
+		if(tableGet != NULL)
 		{
-			avm_assign(gotit,value);
+			avm_assign(tableGet, value);
 			return;
 		}
 
@@ -649,8 +552,9 @@ void avm_tablesetelem(avm_table* table, avm_memcell* index, avm_memcell* value)
 
 		indexOfTable = (int) index->data.numVal % AVM_TABLE_HASHSIZE;
 
-		if(gotit != NULL){
-			avm_assign(gotit,value);
+		if(tableGet != NULL)
+		{
+			avm_assign(tableGet, value);
 			return;
 		}
 
@@ -661,13 +565,14 @@ void avm_tablesetelem(avm_table* table, avm_memcell* index, avm_memcell* value)
             avm_table_bucket* newBucket = (avm_table_bucket*) malloc (sizeof(avm_table_bucket));
     		newBucket->key.data.numVal = index->data.numVal;
 
-    		if(value->type == table_m){
+    		if(value->type == table_m)
+			{
         		avm_tableIncRefCounter(value->data.tableVal);
         	}
 
     		newBucket->value = *value;
 
-    		table->numIndexed[indexOfTable] = newBucket ;
+    		table->numIndexed[indexOfTable] = newBucket;
 
             table->numIndexed[indexOfTable]->next = NULL;
             table->total++;
@@ -711,13 +616,12 @@ avm_memcell* avm_tablegetelem(avm_table* table, avm_memcell* index)
 			avm_table_bucket* tmp = table->strIndexed[indexOfTable];
 			while(tmp != NULL)
 			{
-				if(strcmp (tmp->key.data.strVal, index->data.strVal)==0)
+				if(strcmp(tmp->key.data.strVal, index->data.strVal) == 0)
 					return &tmp->value;
 
 				tmp = tmp->next;
 			}
 		}
-
 	}
 	else if(index->type == number_m)
 	{

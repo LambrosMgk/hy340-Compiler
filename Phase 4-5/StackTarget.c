@@ -14,19 +14,19 @@ void pushFuncStackTarget(symbol* mem)
 {
 	if(functionStackTarget == NULL)
     {
-		funcStack *newTop = (funcStack*) malloc (sizeof(funcStack));
-		newTop->info = mem;
-		newTop->next = NULL;
+		funcStack *new = (funcStack*) malloc (sizeof(funcStack));
+		new->info = mem;
+		new->next = NULL;
 
-		functionStackTarget = newTop;
+		functionStackTarget = new;
 	}
     else
     {
-		funcStack *newTop = (funcStack*) malloc (sizeof(funcStack));
-		newTop->info = mem;
+		funcStack *new = (funcStack*) malloc (sizeof(funcStack));
+		new->info = mem;
 
-		newTop->next = functionStackTarget;
-		functionStackTarget = newTop;
+		new->next = functionStackTarget;
+		functionStackTarget = new;
 	}
 }
 
@@ -61,16 +61,16 @@ symbol* topFuncStackTarget()
     return sym;
 }
 
-void appendFuncStackTarget(symbol* f, unsigned int instrLabel)
+void appendFuncStackTarget(symbol* func, unsigned int instrLabel)
 {
-	returnList* newNode = f->returnList;
+	returnList* newNode = func->returnList;
 
 	if(newNode == NULL)
     {
 		newNode = (returnList*) malloc (sizeof(returnList));	
 		newNode->instrLabel = instrLabel;
 		newNode->next = NULL;
-		f->returnList = newNode;
+		func->returnList = newNode;
 	}
     else
     {

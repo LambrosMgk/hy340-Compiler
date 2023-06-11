@@ -803,13 +803,16 @@ call:       call Lparenthesis elist Rparenthesis    {
                     func->next = tmp;   //connect func expr with elist
                     $2->elist = func;
                 }
+                if($1->type != libraryfunc_e && $2->isMethod == 0)
+                    $1->type = programfunc_e;
 
                 $$ = rule_call($1, $2->elist, &offset, getSpace(), scope, alpha_yylineno);
 
                 printMessage("call -> lvalue callsuffix");
         }  |
             Lparenthesis funcdef Rparenthesis Lparenthesis elist Rparenthesis   {
-                $$ = rule_call($2, $5, &offset, getSpace(), scope, alpha_yylineno);
+                expr* func  = newExpr(programfunc_e, $2->sym);
+                $$ = rule_call(func, $5, &offset, getSpace(), scope, alpha_yylineno);
 
                 printMessage("call -> (funcdef)(elist)");
             }
@@ -1562,7 +1565,7 @@ void createTextFile(char* customName)
     fprintf(fp, "-----------------------------------------------------------------------------------------------------------------------\n");
     for (i = 0; i < nextinstructionlabel(); i++)
     {
-        fprintf(fp, "<%03d>:  op: %8s,    ", i, opcodeToString[instructions[i].opcode]);
+        fprintf(fp, "<%03d>:  op: %13s,    ", i, opcodeToString[instructions[i].opcode]);
         
         fprintf(fp, "type: %14s  ", typeToString(instructions[i].result.type));
         fprintf(fp, "%3d,   ", instructions[i].result.val);

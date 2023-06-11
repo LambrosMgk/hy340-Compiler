@@ -26,7 +26,7 @@ void execute_call (instruction* instr)
 
         default:			
 			s = avm_tostring(func);
-			avm_print_error("Call : cannot bind '",s,"' to function!");
+			avm_print_error("Call : cannot bind '", s, "' to function!");
 			executionFinished = 1;
 	}
 }

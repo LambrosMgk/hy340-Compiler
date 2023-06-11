@@ -92,6 +92,6 @@ struct DataTables{
 
 extern unsigned int totalGlobals;
 
-DataTables* decoder(int printerino, char* customName);
+DataTables* decoder(int printFlag, char* customName);
 
 #endif
