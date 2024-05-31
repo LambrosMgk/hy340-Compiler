@@ -1,8 +1,8 @@
 # hy340
 
-The compiler project for class hy-340 in UOC Computer Science Department
+The group project for class hy-340 in UOC Computer Science Department
 
-The project's goal is the creating of a 2 phase compiler for a custom language called "Alpha" and it consists of 5 phases :
+The project's goal is the creating of a compiler for our custom language called "Alpha" and it consists of 5 phases :
 
 
 Phase 1 :
