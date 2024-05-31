@@ -1,6 +1,3 @@
-Se sugkrish me perusi ebgala ola ta stacks pou eixa gia break continue klp kai allaxa ligo tous kanones sou synaktikou
-mazi me thn patchLabel wste na meiwsw ta polla xexwrista stacks pou eixa
-
 Uparxei makefile pou me "make all" ftiaxnei to parser (.exe)
 
 exw kapoia themata me ta objects kai kapoia print sta quads, den prolaba na kanw polla test
